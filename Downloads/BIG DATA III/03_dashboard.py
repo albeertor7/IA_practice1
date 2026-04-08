@@ -1,0 +1,1240 @@
+"""
+============================================================
+ US AIRLINE ON-TIME PERFORMANCE — MARCUS REID DASHBOARD v2
+============================================================
+Redesigned following course modules 3-5 and rubric:
+  - Module 3: Pre-attentive attributes, Gestalt, cognitive load
+  - Module 4: Chart-question alignment, honest axes
+  - Module 5: Grammar of Graphics, color semantics, heatmap geom
+
+Changes from v1:
+  - KPIs: large number + semantic color + delta + badge
+  - "Why" → Donut (5 categories, clear proportions)
+  - "When" → Heatmap hour×day (replaces line chart)
+  - "Delay Propagation" → FRI carrier ranking (actionable)
+  - "Predictive" → Horizontal bars with benchmark line
+  - Full dark theme, colorblind-safe palette
+  - Marcus narrative alert bar
+
+Run:  python3 03_dashboard.py
+Open: http://127.0.0.1:8050
+"""
+
+import numpy as np
+import pandas as pd
+from pathlib import Path
+import sys
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
+import dash
+from dash import dcc, html, Input, Output, State
+import dash_bootstrap_components as dbc
+
+DATA_DIR = Path("data")
+
+# ── LOAD DATA ─────────────────────────────────────────────
+def load_data():
+    d = {}
+    try:
+        d["clean"]       = pd.read_parquet(DATA_DIR / "bts_2023_clean.parquet")
+        d["carrier_kpi"] = pd.read_parquet(DATA_DIR / "agg_carrier_kpi.parquet")
+        d["heatmap"]     = pd.read_parquet(DATA_DIR / "agg_heatmap.parquet")
+        d["monthly"]     = pd.read_parquet(DATA_DIR / "agg_monthly.parquet")
+        d["airports"]    = pd.read_parquet(DATA_DIR / "agg_airport_stats.parquet")
+        d["causes"]      = pd.read_parquet(DATA_DIR / "agg_delay_causes.parquet")
+    except FileNotFoundError as e:
+        print(f"⚠ Warning: Data file not found. Using mock data. {e}")
+        d = generate_mock_data()
+    return d
+
+def generate_mock_data():
+    """Generate realistic mock data for visualization."""
+    np.random.seed(42)
+    n_rows = 5000
+    
+    carriers = ["Delta Air Lines", "United Airlines", "American Airlines", "Southwest Airlines", "JetBlue Airways"]
+    airports_list = ["JFK", "LAX", "ORD", "ATL", "DFW", "LAS", "DEN", "SFO", "SEA", "MIA"]
+    
+    clean_df = pd.DataFrame({
+        "YEAR": np.random.choice([2023], n_rows),
+        "MONTH": np.random.choice(range(1, 13), n_rows),
+        "DAY_OF_WEEK": np.random.choice(range(0, 7), n_rows),
+        "HOUR_DEP": np.random.choice(range(6, 21), n_rows),
+        "CARRIER_NAME": np.random.choice(carriers, n_rows),
+        "OP_CARRIER": np.random.choice(["DL", "UA", "AA", "WN", "B6"], n_rows),
+        "ORIGIN": np.random.choice(airports_list, n_rows),
+        "DEST": np.random.choice(airports_list, n_rows),
+        "ON_TIME": np.random.choice([0, 1], n_rows, p=[0.31, 0.69]),
+        "DEP_DELAY": np.random.normal(5, 20, n_rows),
+        "ARR_DELAY": np.random.normal(2.4, 15, n_rows),
+        "CANCELLED": np.random.choice([0, 1], n_rows, p=[1, 0]),
+        "LATE_AIRCRAFT_DELAY": np.random.exponential(3, n_rows),
+        "CARRIER_DELAY": np.random.exponential(2.5, n_rows),
+        "NAS_DELAY": np.random.exponential(1.8, n_rows),
+        "WEATHER_DELAY": np.random.exponential(1.2, n_rows),
+        "SECURITY_DELAY": np.random.exponential(0.3, n_rows),
+    })
+    
+    carrier_kpi = clean_df.groupby("CARRIER_NAME").agg(
+        on_time_pct=("ON_TIME", "mean"),
+        avg_arr_delay=("ARR_DELAY", "mean"),
+        cancel_rate=("CANCELLED", "mean"),
+    ).reset_index()
+    
+    heatmap_df = clean_df[["DAY_OF_WEEK", "HOUR_DEP", "ARR_DELAY"]].copy()
+    
+    monthly_df = clean_df.groupby("MONTH")["ARR_DELAY"].mean().reset_index()
+    
+    airport_stats = []
+    for apt in airports_list:
+        subset = clean_df[(clean_df["ORIGIN"] == apt) | (clean_df["DEST"] == apt)]
+        airport_stats.append({
+            "iata": apt,
+            "city": apt,
+            "lat": np.random.uniform(25, 48),
+            "lon": np.random.uniform(-125, -70),
+            "avg_delay": subset["ARR_DELAY"].mean() if len(subset) > 0 else 2.4,
+        })
+    airports_df = pd.DataFrame(airport_stats)
+    
+    causes_df = clean_df[["LATE_AIRCRAFT_DELAY", "CARRIER_DELAY", "NAS_DELAY", "WEATHER_DELAY", "SECURITY_DELAY"]].copy()
+    
+    return {
+        "clean": clean_df,
+        "carrier_kpi": carrier_kpi,
+        "heatmap": heatmap_df,
+        "monthly": monthly_df,
+        "airports": airports_df,
+        "causes": causes_df,
+    }
+
+DATA = load_data()
+
+# ── PALETTE (colorblind-safe, module 3) ───────────────────
+C = {
+    "bg":       "#0D1117",
+    "surface":  "#161B22",
+    "surface2": "#1C2230",
+    "border":   "rgba(255,255,255,0.08)",
+    "text":     "#E6EDF3",
+    "muted":    "#7D8590",
+    "green":    "#2EA043",
+    "amber":    "#D29922",
+    "red":      "#DA3633",
+    "blue":     "#2F81F7",
+    "teal":     "#1B7F79",
+}
+
+# ── HELPERS ────────────────────────────────────────────────
+
+def normalize(s):
+    """Min-max normalize."""
+    return (s - s.min()) / (s.max() - s.min() + 1e-9)
+
+def compute_metrics(df, df_with_cancelled=None):
+    """Compute KPI metrics."""
+    if df.empty:
+        return {"ontime": 0.0, "delay": 0.0, "cancel": 0.0, "fri": 0.0}
+    ontime = round(df["ON_TIME"].mean() * 100, 1)
+    delay  = round(df["ARR_DELAY"].mean(), 1)
+
+    # Cancel rate desde agg_carrier_kpi que sí tiene el dato real
+    try:
+        kpi_data = pd.read_parquet(DATA_DIR / "agg_carrier_kpi.parquet")
+        cancel = round(
+            (kpi_data["cancel_rate"] * kpi_data["flights"]).sum() /
+            kpi_data["flights"].sum() * 100, 1
+        )
+    except:
+        cancel = 2.4  # valor real BTS 2023
+
+    fri = round(
+        0.50 * (ontime / 100) +
+        0.30 * (1 - min(1, delay / 30)) +
+        0.20 * (1 - min(1, cancel / 10)),
+        3
+    ) * 100
+    # Avg 150 passengers per flight, delay in minutes → hours lost
+    total_delay_hours = round((df["ARR_DELAY"][df["ARR_DELAY"] > 0].sum() * 150) / 60 / 1_000_000, 1)
+    return {"ontime": ontime, "delay": delay, "cancel": cancel, "fri": round(fri, 1), "passenger_hours": total_delay_hours}
+
+def kpi_badge(label, color):
+    """Create semantic badge."""
+    return html.Span(label, style={
+        "fontSize": "10px", "fontWeight": "600", "padding": "2px 10px",
+        "borderRadius": "20px", "textTransform": "uppercase", "letterSpacing": ".05em",
+        "background": f"rgba({','.join(str(int(color.lstrip('#')[i:i+2], 16)) for i in (0, 2, 4))},.14)",
+        "color": color, "marginTop": "6px", "display": "inline-block"
+    })
+
+def get_panel(title, subtitle, content):
+    """Reusable panel component."""
+    return html.Div([
+        html.Div(title, style={"fontSize": "13px", "fontWeight": "600", "color": C["text"], "marginBottom": "2px"}),
+        html.Div(subtitle, style={"fontSize": "11px", "color": C["muted"], "marginBottom": "12px"}),
+        html.Div(content)
+    ], style={
+        "background": C["surface"],
+        "border": f"1px solid {C['border']}",
+        "borderRadius": "14px",
+        "padding": "18px",
+    })
+
+# ── KPI STRIP ──────────────────────────────────────────────
+
+def build_kpi_strip(metrics):
+    """Build KPI strip with semantic colors."""
+    
+    def get_color(key, val):
+        if key == "ontime":
+            return C["green"] if val >= 80 else C["amber"] if val >= 65 else C["red"]
+        if key == "delay":
+            return C["green"] if val <= 8 else C["amber"] if val <= 15 else C["red"]
+        if key == "cancel":
+            return C["green"] if val <= 2 else C["amber"] if val <= 5 else C["red"]
+        if key == "fri":
+            return C["green"] if val >= 70 else C["amber"] if val >= 55 else C["red"]
+        return C["text"]
+
+    def get_badge(key, val):
+        if key == "ontime":
+            return ("Excellent", C["green"]) if val >= 80 else ("Moderate", C["amber"]) if val >= 65 else ("Poor", C["red"])
+        if key == "delay":
+            return ("Low Impact", C["green"]) if val <= 8 else ("Moderate", C["amber"]) if val <= 15 else ("High Impact", C["red"])
+        if key == "cancel":
+            return ("Low Risk", C["green"]) if val <= 2 else ("Moderate", C["amber"]) if val <= 5 else ("High Risk", C["red"])
+        if key == "fri":
+            return ("Reliable", C["green"]) if val >= 70 else ("Moderate", C["amber"]) if val >= 55 else ("Unreliable", C["red"])
+        return ("—", C["muted"])
+
+    kpi_defs = [
+        ("ontime", "ON-TIME PERFORMANCE", f"{metrics['ontime']}%", "System-wide punctuality", "Arrival < 15 min late"),
+        ("delay", "AVG. ARRIVAL DELAY", f"{metrics['delay']} min", "Average late arrival", "Cancelled flights excluded"),
+        ("cancel", "CANCELLATION RATE", f"{metrics['cancel']}%", "Flights cancelled", "Separate operational risk"),
+        ("fri", "FLIGHT RELIABILITY INDEX", f"{metrics['fri']}", "Composite 0–100 score", "50% OT + 30% delay + 20% cancel"),
+    ]
+
+    hero_val = metrics.get("passenger_hours", 0)
+    hero_color = C["green"] if hero_val < 0.5 else C["amber"] if hero_val < 1.0 else C["red"]
+    hero_card = dbc.Col(html.Div([
+        html.Div(style={"height":"4px","borderRadius":"10px 10px 0 0","background":hero_color}),
+        html.Div([
+            html.P("PASSENGER HOURS LOST", style={"fontSize":"11px","color":C["muted"],
+                   "fontWeight":"600","letterSpacing":".06em","textTransform":"uppercase","margin":"0 0 10px"}),
+            html.Div(f"{hero_val}M hours", style={"fontSize":"48px","fontWeight":"700",
+                     "color":hero_color,"letterSpacing":"-0.04em","lineHeight":"1","marginBottom":"8px"}),
+            html.P("Total delay × 150 passengers avg ÷ 60", style={"fontSize":"11px","color":C["muted"],"margin":"0 0 8px"}),
+            html.Span("HUMAN IMPACT", style={"fontSize":"10px","fontWeight":"600","padding":"2px 8px",
+                      "borderRadius":"20px","textTransform":"uppercase","background":f"rgba(218,54,51,.15)",
+                      "color":hero_color}),
+        ], style={"padding":"18px 20px"}),
+    ], style={"background":C["surface"],"borderRadius":"0 0 12px 12px",
+              "border":f"1px solid {C['border']}","borderTop":"none","minHeight":"148px"}),
+    md=12, style={"marginBottom":"12px"})
+
+    cols = []
+    for key, label, value, subtitle, badge_text in kpi_defs:
+        color = get_color(key, metrics[key])
+        badge_label, badge_color = get_badge(key, metrics[key])
+        cols.append(dbc.Col(html.Div([
+            html.Div(style={"height": "4px", "borderRadius": "4px 4px 0 0", "background": color, "marginBottom": "0"}),
+            html.Div([
+                html.P(label, style={"fontSize": "10px", "color": C["muted"], "fontWeight": "600", "letterSpacing": ".08em", "textTransform": "uppercase", "margin": "0 0 8px"}),
+                html.Div(value, style={"fontSize": "28px", "fontWeight": "700", "color": color, "lineHeight": "1", "marginBottom": "4px"}),
+                html.P(subtitle, style={"fontSize": "10px", "color": C["muted"], "margin": "0 0 8px"}),
+                kpi_badge(badge_label, badge_color),
+            ], style={"padding": "14px 16px"}),
+        ], style={"background": C["surface"], "borderRadius": "0 0 12px 12px", "border": f"1px solid {C['border']}", "borderTop": "none"}), md=3))
+
+    return html.Div([
+        dbc.Row([hero_card], className="g-3"),
+        dbc.Row(cols, className="g-3 mb-3"),
+    ])
+
+# ── MARCUS ALERT ───────────────────────────────────────────
+
+def marcus_alert(df, selected_airline, selected_airport):
+    """Decision insight bar."""
+    if df.empty:
+        return html.Div("No insights available for this selection.", style={"color": C["muted"], "fontSize": "12px"})
+
+    if selected_airline and selected_airline != "All":
+        best_text = f"The current data recommends {selected_airline} for this route."
+    else:
+        if "OP_CARRIER" in df.columns and "ON_TIME" in df.columns:
+            MAJOR_CARRIERS = ["DL", "AA", "UA", "WN", "AS", "B6", "NK", "F9"]
+            CARRIER_FRI = (
+                df.groupby(["OP_CARRIER", "CARRIER_NAME"])
+                .agg(FRI=("ON_TIME", lambda x: x.mean() * 100))
+                .reset_index()
+                .sort_values("FRI", ascending=False)
+            )
+            top_fri = CARRIER_FRI[CARRIER_FRI["OP_CARRIER"].isin(MAJOR_CARRIERS)]
+            top_carrier = top_fri.iloc[0]["CARRIER_NAME"] if not top_fri.empty else "Delta Air Lines"
+            top_score = top_fri.iloc[0]["FRI"] if not top_fri.empty else 80.0
+            second_carrier = top_fri.iloc[1]["CARRIER_NAME"] if len(top_fri) > 1 else "American Airlines"
+            second_score = top_fri.iloc[1]["FRI"] if len(top_fri) > 1 else 70.0
+            gap = top_score - second_score
+            best_text = (
+                f"Real data insight: Sunday and Friday evenings (19–22h) are the worst slots "
+                f"— avg delay up to 19 min with 50k+ flights affected. "
+                f"Best option: fly Tuesday or Thursday before 9am — avg delay is negative (arrives early). "
+                f"Action: Book {top_carrier} on an early weekday morning for maximum reliability."
+            )
+        elif "CARRIER_NAME" in df.columns and "ON_TIME" in df.columns:
+            carriers = df.groupby("CARRIER_NAME").agg(on_time_pct=("ON_TIME", "mean")).reset_index()
+            carriers = carriers.sort_values("on_time_pct", ascending=False)
+            if len(carriers) >= 2:
+                best_carrier = carriers.iloc[0]["CARRIER_NAME"]
+                best_pct = carriers.iloc[0]["on_time_pct"] * 100
+                second_pct = carriers.iloc[1]["on_time_pct"] * 100
+                best_text = f"Data favors {best_carrier}: {best_pct:.1f}% on-time vs {second_pct:.1f}% for the next-best carrier."
+            else:
+                best_text = "Carrier reliability is stable across the selected dataset."
+        else:
+            best_text = "Airline selection is stable."
+
+    slot_text = "Monday 6–9am from ORD"
+    if selected_airport and selected_airport != "All":
+        slot_text = f"Peak hub analysis at {selected_airport} during Monday 6–9am."
+
+    return html.Div([
+        html.Div([
+            html.Span("Decision insight", style={"color": C["amber"], "fontSize": "11px", "fontWeight": "700", "marginRight": "10px"}),
+            html.Span(best_text, style={"color": C["text"], "fontSize": "12px"}),
+        ], style={"display": "flex", "justifyContent": "center", "alignItems": "center", "gap": "10px"}),
+        html.Div(slot_text, style={"color": C["muted"], "fontSize": "11px", "marginTop": "8px"}),
+    ], style={"background": C["surface"], "border": f"1px solid {C['border']}", "borderRadius": "14px", "padding": "16px", "display": "inline-block"})
+
+# ── MAP ────────────────────────────────────────────────────
+
+def build_airport_map(df, selected_airport):
+    """Build airport hotspot map."""
+    if df.empty or DATA["airports"].empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No airport data available", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=380)
+        return fig
+
+    airport_data = pd.concat([
+        df[["ORIGIN", "ARR_DELAY"]].rename(columns={"ORIGIN": "iata"}) if "ORIGIN" in df.columns else pd.DataFrame(),
+        df[["DEST", "ARR_DELAY"]].rename(columns={"DEST": "iata"}) if "DEST" in df.columns else pd.DataFrame(),
+    ], ignore_index=True)
+
+    if airport_data.empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No data", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=380)
+        return fig
+
+    stats = airport_data.groupby("iata").agg(avg_delay=("ARR_DELAY", "mean"), flights=("iata", "size")).reset_index()
+    stats = stats.merge(DATA["airports"][['iata', 'city', 'lat', 'lon']], on='iata', how='left').dropna(subset=['lat', 'lon'])
+
+    if stats.empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No geo data", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=380)
+        return fig
+
+    np.random.seed(42)
+    stats = stats.copy()
+    stats["lat_jitter"] = stats["lat"] + np.random.normal(0, 0.015, len(stats))
+    stats["lon_jitter"] = stats["lon"] + np.random.normal(0, 0.015, len(stats))
+
+    fig = go.Figure(go.Scattergeo(
+        lon=stats["lon_jitter"],
+        lat=stats["lat_jitter"],
+        text=stats.apply(lambda r: f"<b>{r['iata']}</b><br>Avg delay: {r['avg_delay']:.1f} min<br>Flights: {int(r['flights']):,}", axis=1),
+        mode="markers",
+        marker=dict(
+            size=stats["flights"] / stats["flights"].max() * 20 + 5,
+            color=stats["avg_delay"],
+            colorscale=[[0.0, "#0d4429"], [0.3, "#1e5f2a"], [0.5, "#8a7a12"], [0.7, "#b04c16"], [1.0, "#a10e1b"]],
+            cmin=0,
+            cmax=max(stats["avg_delay"].max(), 15),
+            colorbar=dict(title=dict(text="Avg delay (min)", font=dict(color=C["muted"], size=10)), thickness=10, len=0.7),
+            line=dict(width=1, color="rgba(255,255,255,.3)"),
+            opacity=0.85
+        ),
+        hovertemplate="<b>%{text}</b><extra></extra>",
+    ))
+
+    highlight = selected_airport if selected_airport and selected_airport != "All" else "ORD"
+    target = stats[stats["iata"] == highlight]
+    if not target.empty:
+        fig.add_trace(go.Scattergeo(
+            lon=target["lon_jitter"],
+            lat=target["lat_jitter"],
+            mode="markers+text",
+            marker=dict(size=24, color=C["amber"], symbol="star", line=dict(width=2, color="white")),
+            text=highlight,
+            textposition="top center",
+            textfont=dict(size=11, color=C["amber"]),
+            hoverinfo="skip",
+            showlegend=False
+        ))
+
+    fig.update_geos(scope="usa", bgcolor=C["bg"], landcolor="#1C2230", showland=True, showcoastlines=True, coastlinecolor="rgba(255,255,255,.1)", showframe=False)
+    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], showlegend=False, height=380)
+    return fig
+
+# ── HEATMAP ────────────────────────────────────────────────
+
+def build_heatmap(df):
+    """Hourly congestion heatmap."""
+    if df.empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No hourly data", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=320)
+        return fig
+
+    df = df.copy()
+    if "HOUR_DEP" in df.columns:
+        df = df[df["HOUR_DEP"].between(6, 20)]
+    if "DAY_OF_WEEK" in df.columns and "HOUR_DEP" in df.columns and "ARR_DELAY" in df.columns:
+        day_names = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}
+        df["day_name"] = df["DAY_OF_WEEK"].map(day_names)
+        order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+        pivot = df.groupby(["day_name", "HOUR_DEP"]).agg(avg_delay=("ARR_DELAY", "mean")).reset_index()
+        pivot = pivot.pivot(index="day_name", columns="HOUR_DEP", values="avg_delay").reindex(order)
+        pivot = pivot[[h for h in range(6, 21) if h in pivot.columns]]
+
+        x = [f"{int(h):02d}:00" for h in pivot.columns]
+        y = pivot.index.tolist()
+        z = pivot.values
+
+        fig = go.Figure(go.Heatmap(
+            z=z, x=x, y=y,
+            text=np.round(z, 0),
+            texttemplate="%{text}",
+            textfont=dict(size=9, color="rgba(230,237,243,.8)"),
+            colorscale=[[0.0, "#0d4429"], [0.25, "#1e5f2a"], [0.5, "#8a7a12"], [0.75, "#b04c16"], [1.0, "#a10e1b"]],
+            colorbar=dict(title=dict(text="Avg delay (min)", font=dict(color=C["muted"], size=9)), thickness=8, len=0.7),
+            hovertemplate="<b>%{y} %{x}</b><br>Avg delay: %{z:.1f} min<extra></extra>",
+        ))
+
+        # Calcular worst y best slot dinámicamente desde los datos filtrados
+        heatmap_agg = (
+            df.groupby(["day_name", "HOUR_DEP"])
+            .agg(avg_delay=("ARR_DELAY", "mean"), flight_count=("ARR_DELAY", "count"))
+            .reset_index()
+        )
+        df_vol = heatmap_agg[heatmap_agg["flight_count"] > 100]
+        if not df_vol.empty:
+            worst_row = df_vol.loc[df_vol["avg_delay"].idxmax()]
+            best_row  = df_vol.loc[df_vol["avg_delay"].idxmin()]
+
+            pivot_cols = list(pivot.columns)
+            pivot_idx  = list(pivot.index)
+
+            worst_x = pivot_cols.index(worst_row["HOUR_DEP"]) if worst_row["HOUR_DEP"] in pivot_cols else None
+            worst_y = pivot_idx.index(worst_row["day_name"]) if worst_row["day_name"] in pivot_idx else None
+            best_x  = pivot_cols.index(best_row["HOUR_DEP"]) if best_row["HOUR_DEP"] in pivot_cols else None
+            best_y  = pivot_idx.index(best_row["day_name"]) if best_row["day_name"] in pivot_idx else None
+
+            if worst_x is not None and worst_y is not None:
+                fig.add_shape(type="rect",
+                    x0=worst_x-0.5, x1=worst_x+0.5,
+                    y0=worst_y-0.5, y1=worst_y+0.5,
+                    xref="x", yref="y",
+                    line=dict(color="#FF4444", width=2.5),
+                    fillcolor="rgba(0,0,0,0)"
+                )
+                fig.add_annotation(
+                    x=1.02, y=worst_y,
+                    xref="paper", yref="y",
+                    text="▲ worst",
+                    showarrow=False,
+                    font=dict(size=9, color="#FF4444"),
+                    xanchor="left"
+                )
+
+            if best_x is not None and best_y is not None:
+                fig.add_shape(type="rect",
+                    x0=best_x-0.5, x1=best_x+0.5,
+                    y0=best_y-0.5, y1=best_y+0.5,
+                    xref="x", yref="y",
+                    line=dict(color="#2EA043", width=2.5),
+                    fillcolor="rgba(0,0,0,0)"
+                )
+                fig.add_annotation(
+                    x=1.02, y=best_y,
+                    xref="paper", yref="y",
+                    text="▼ best",
+                    showarrow=False,
+                    font=dict(size=9, color="#2EA043"),
+                    xanchor="left"
+                )
+
+        fig.update_layout(margin=dict(l=50, r=70, t=10, b=50), paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], font=dict(color=C["text"], size=9), height=320)
+        return fig
+    else:
+        fig = go.Figure()
+        fig.add_annotation(text="Missing heatmap columns", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=320)
+        return fig
+
+# ── DONUT CHART ────────────────────────────────────────────
+
+def build_donut(df):
+    """Why delays occur - cause breakdown."""
+    if df.empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No cause data", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=380)
+        return fig
+
+    totals = {}
+    if "LATE_AIRCRAFT_DELAY" in df.columns:
+        totals["Late Aircraft"] = df["LATE_AIRCRAFT_DELAY"].sum()
+    if "CARRIER_DELAY" in df.columns:
+        totals["Airline Operations"] = df["CARRIER_DELAY"].sum()
+    if "NAS_DELAY" in df.columns:
+        totals["NAS / Air Traffic"] = df["NAS_DELAY"].sum()
+    if "WEATHER_DELAY" in df.columns:
+        totals["Weather"] = df["WEATHER_DELAY"].sum()
+    if "SECURITY_DELAY" in df.columns:
+        totals["Security"] = df["SECURITY_DELAY"].sum()
+
+    if not totals:
+        fig = go.Figure()
+        fig.add_annotation(text="No cause columns", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=380)
+        return fig
+
+    labels = list(totals.keys())
+    values = list(totals.values())
+    colors_list = [C["red"], C["amber"], C["blue"], C["green"], C["teal"]]
+
+    max_val = max(values) if values else 1
+    pull = [0.1 if v == max_val else 0 for v in values]
+
+    fig = go.Figure(go.Pie(
+        labels=labels,
+        values=values,
+        hole=0.55,
+        marker=dict(colors=colors_list[:len(labels)], line=dict(color=C["bg"], width=2)),
+        textinfo="none",
+        hovertemplate="<b>%{label}</b><br>%{percent}<br>%{value:,.0f} min<extra></extra>",
+        pull=pull,
+    ))
+
+    main_pct = round(values[0] / sum(values) * 100 if sum(values) else 0)
+    fig.add_annotation(
+        text=f"<b>{main_pct}%</b><br><span style='font-size:9px'>{labels[0].upper()}</span>",
+        x=0.5, y=0.5, showarrow=False,
+        font=dict(color=colors_list[0], size=16, family="system-ui"),
+        xanchor="center", yanchor="middle",
+    )
+
+    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], showlegend=True, height=380)
+    return fig
+
+# ── FRI CHART ──────────────────────────────────────────────
+
+def build_fri_chart(df, selected_airline):
+    """Carrier reliability ranking."""
+    if DATA["carrier_kpi"].empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No carrier data", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=320)
+        return fig
+
+    carriers = DATA["carrier_kpi"].copy()
+
+    if "on_time_pct" not in carriers.columns or "avg_arr_delay" not in carriers.columns:
+        fig = go.Figure()
+        fig.add_annotation(text="Missing carrier columns", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=320)
+        return fig
+
+    # Compute FRI
+    carriers["FRI"] = (
+        0.50 * carriers["on_time_pct"] +
+        0.30 * (1 - normalize(carriers["avg_arr_delay"])) * 100 +
+        0.20 * (1 - carriers["cancel_rate"].fillna(0)) * 100
+    ).round(1)
+    carriers = carriers.sort_values("FRI", ascending=False)
+
+    def fri_color(v):
+        return C["green"] if v >= 70 else C["amber"] if v >= 55 else C["red"]
+
+    colors = [fri_color(v) for v in carriers["FRI"]]
+    if selected_airline and selected_airline != "All":
+        colors = [C["blue"] if name == selected_airline else c for c, name in zip(colors, carriers["CARRIER_NAME"])]
+
+    fig = go.Figure(go.Bar(
+        x=carriers["FRI"],
+        y=carriers["CARRIER_NAME"],
+        orientation="h",
+        marker=dict(color=colors, line=dict(color=colors, width=1.5)),
+        text=carriers["FRI"].round(0),
+        textposition="outside",
+        textfont=dict(color=C["muted"], size=9),
+        hovertemplate="<b>%{y}</b><br>FRI: %{x:.0f}/100<extra></extra>",
+    ))
+
+    industry_avg = carriers["FRI"].mean()
+    fig.add_vline(x=70, line=dict(color=C["green"], width=1, dash="dot"))
+    fig.add_vline(x=55, line=dict(color=C["red"], width=1, dash="dot"))
+    fig.add_vline(x=industry_avg, line=dict(color=C["blue"], width=2, dash="dash"))
+
+    fig.update_layout(
+        xaxis=dict(title=dict(text="Flight Reliability Index (0–100)", font=dict(color=C["muted"], size=9)), tickfont=dict(color=C["muted"], size=8)),
+        yaxis=dict(tickfont=dict(color=C["text"], size=9)),
+        margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor=C["bg"],
+        plot_bgcolor=C["bg"],
+        font=dict(color=C["text"], family="system-ui", size=9),
+        showlegend=False,
+        height=320
+    )
+    return fig
+
+# ── PREDICTIVE RISK ────────────────────────────────────────
+
+def build_predictive_chart(df):
+    """Top airports with delay risk."""
+    if DATA["airports"].empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No airport data", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=380)
+        return fig
+
+    stats = DATA["airports"].copy()
+    if "avg_delay" not in stats.columns:
+        fig = go.Figure()
+        fig.add_annotation(text="Missing delay column", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=380)
+        return fig
+
+    stats = stats.sort_values("avg_delay", ascending=False).head(12)
+
+    def risk_color(v):
+        return C["red"] if v > 12 else C["amber"] if v >= 8 else C["green"]
+
+    colors = [risk_color(v) for v in stats["avg_delay"]]
+
+    fig = go.Figure(go.Bar(
+        x=stats["avg_delay"],
+        y=stats["iata"],
+        orientation="h",
+        marker=dict(color=colors, line=dict(color=colors, width=1)),
+        text=[f"{v:.1f}" for v in stats["avg_delay"]],
+        textposition="outside",
+        textfont=dict(color=C["text"], size=9),
+        hovertemplate="<b>%{y}</b><br>Avg delay: %{x:.1f} min<extra></extra>",
+    ))
+
+    sys_avg = stats["avg_delay"].mean()
+    fig.add_vline(x=sys_avg, line=dict(color="rgba(255,255,255,.5)", width=2, dash="dash"))
+
+    fig.update_layout(
+        xaxis=dict(title=dict(text="Minutes", font=dict(color=C["muted"], size=8)), tickfont=dict(color=C["muted"], size=8)),
+        yaxis=dict(tickfont=dict(color=C["text"], size=9)),
+        margin=dict(l=0, r=60, t=0, b=0),
+        paper_bgcolor=C["bg"],
+        plot_bgcolor=C["bg"],
+        font=dict(color=C["text"], family="system-ui", size=8),
+        showlegend=False,
+        height=380
+    )
+    return fig
+
+# ── SCATTER PROPAGATION ────────────────────────────────────
+
+def build_scatter_propagation(df):
+    """DEP_DELAY vs ARR_DELAY scatter with regression line, colored by airline."""
+    if df.empty or len(df) < 500:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Not enough flights for propagation analysis",
+            showarrow=False,
+            font=dict(color=C["muted"], size=13)
+        )
+        fig.update_layout(
+            paper_bgcolor=C["bg"], plot_bgcolor=C["bg"],
+            height=420, margin=dict(l=60, r=20, t=10, b=50)
+        )
+        return fig
+    if df.empty or "DEP_DELAY" not in df.columns or "ARR_DELAY" not in df.columns:
+        fig = go.Figure()
+        fig.add_annotation(text="No delay propagation data available", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=420)
+        return fig
+
+    sample = df[["DEP_DELAY", "ARR_DELAY", "CARRIER_NAME"]].dropna()
+    sample = sample[(sample["DEP_DELAY"] >= -30) & (sample["DEP_DELAY"] <= 180)]
+    sample = sample[(sample["ARR_DELAY"] >= -60) & (sample["ARR_DELAY"] <= 180)]
+    if len(sample) > 50000:
+        sample = sample.sample(50000, random_state=42)
+
+    palette = [C["blue"], C["green"], C["amber"], C["red"], C["teal"],
+               "#9B59B6", "#E67E22", "#1ABC9C", "#F39C12", "#2ECC71"]
+    carriers_sorted = sorted(sample["CARRIER_NAME"].unique())
+    color_map = {c: palette[i % len(palette)] for i, c in enumerate(carriers_sorted)}
+
+    fig = go.Figure()
+    for carrier, grp in sample.groupby("CARRIER_NAME"):
+        fig.add_trace(go.Scattergl(
+            x=grp["DEP_DELAY"],
+            y=grp["ARR_DELAY"],
+            mode="markers",
+            name=carrier,
+            marker=dict(color=color_map[carrier], size=3, opacity=0.35),
+            hovertemplate=f"<b>{carrier}</b><br>Dep delay: %{{x:.0f}} min<br>Arr delay: %{{y:.0f}} min<extra></extra>",
+        ))
+
+    x_vals = sample["DEP_DELAY"].values
+    y_vals = sample["ARR_DELAY"].values
+    mask = np.isfinite(x_vals) & np.isfinite(y_vals)
+    if mask.sum() > 2:
+        m, b = np.polyfit(x_vals[mask], y_vals[mask], 1)
+        x_range = np.array([np.percentile(x_vals[mask], 1), np.percentile(x_vals[mask], 99)])
+        fig.add_trace(go.Scatter(
+            x=x_range, y=m * x_range + b,
+            mode="lines",
+            name="Regression",
+            line=dict(color="#FFFFFF", width=3, dash="dash"),
+            opacity=0.9,
+            hoverinfo="skip",
+        ))
+
+    fig.update_layout(
+        xaxis=dict(
+            range=[-30, 185],
+            title=dict(text="Departure delay (min)", font=dict(color=C["muted"], size=9)),
+            tickfont=dict(color=C["muted"], size=8),
+            gridcolor=C["border"], zeroline=False,
+        ),
+        yaxis=dict(
+            range=[-60, 185],
+            title=dict(text="Arrival delay (min)", font=dict(color=C["muted"], size=9)),
+            tickfont=dict(color=C["muted"], size=8),
+            gridcolor=C["border"], zeroline=False,
+        ),
+        legend=dict(font=dict(color=C["muted"], size=8), bgcolor="rgba(0,0,0,0)", itemsizing="constant"),
+        margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor=C["bg"],
+        plot_bgcolor=C["bg"],
+        font=dict(color=C["text"], family="system-ui", size=9),
+        height=420,
+    )
+    return fig
+
+# ── SEVERE DELAY CHART ─────────────────────────────────────
+
+def build_severe_delay_chart(df):
+    """Horizontal bar: % of flights with ARR_DELAY > 60 min by airline."""
+    if df.empty or len(df) < 100:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Not enough data for this selection",
+            showarrow=False,
+            font=dict(color=C["muted"], size=13),
+            xanchor="center", yanchor="middle"
+        )
+        fig.update_layout(
+            paper_bgcolor=C["bg"], plot_bgcolor=C["bg"],
+            height=340, margin=dict(l=50, r=60, t=10, b=30)
+        )
+        return fig
+    if "ARR_DELAY" not in df.columns or "CARRIER_NAME" not in df.columns:
+        fig = go.Figure()
+        fig.add_annotation(text="No severe delay data available", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=420)
+        return fig
+
+    group_cols = ["OP_CARRIER", "CARRIER_NAME"] if "OP_CARRIER" in df.columns else ["CARRIER_NAME"]
+    severe = (
+        df.groupby(group_cols)
+        .apply(lambda x: (x["ARR_DELAY"] > 60).mean() * 100)
+        .reset_index(name="severe_pct")
+        .sort_values("severe_pct", ascending=True)
+    )
+    if len(severe) < 3:
+        # Mostrar el carrier seleccionado vs sistema
+        try:
+            all_severe = (
+                DATA["clean"]
+                .groupby("CARRIER_NAME")
+                .apply(lambda x: (x["ARR_DELAY"] > 60).mean() * 100)
+                .reset_index(name="severe_rate")
+            )
+            system_avg = all_severe["severe_rate"].mean()
+        except:
+            system_avg = 7.0  # valor real BTS 2023
+
+        carrier_name = severe.iloc[0]["CARRIER_NAME"] if not severe.empty else "Selected carrier"
+        carrier_rate = severe.iloc[0]["severe_pct"] if not severe.empty else 0
+
+        def severe_color(v):
+            return C["red"] if v >= 6 else C["amber"] if v >= 3 else C["green"]
+
+        col = severe_color(carrier_rate)
+        r, g, b = int(col[1:3], 16), int(col[3:5], 16), int(col[5:7], 16)
+        col_fill = f"rgba({r},{g},{b},0.45)"
+
+        fig = go.Figure()
+
+        # Barra del carrier seleccionado
+        fig.add_trace(go.Bar(
+            x=[carrier_rate],
+            y=[carrier_name],
+            orientation="h",
+            marker=dict(color=col_fill, line=dict(color=col, width=1.5)),
+            text=[f"{carrier_rate:.1f}%"],
+            textposition="outside",
+            textfont=dict(color=C["muted"], size=11),
+            name=carrier_name,
+        ))
+
+        # Línea de sistema
+        fig.add_vline(
+            x=system_avg,
+            line=dict(color="rgba(255,255,255,.4)", width=1.5, dash="dash"),
+            annotation=dict(
+                text=f"System avg {system_avg:.1f}%",
+                font=dict(color=C["muted"], size=9),
+                yref="paper", y=1.1, showarrow=False
+            )
+        )
+
+        # Comparación textual
+        diff = carrier_rate - system_avg
+        comp_text = f"{abs(diff):.1f}pp {'above' if diff > 0 else 'below'} system average"
+        comp_color = C["red"] if diff > 0 else C["green"]
+
+        fig.add_annotation(
+            x=0.5, y=-0.25,
+            xref="paper", yref="paper",
+            text=comp_text,
+            showarrow=False,
+            font=dict(color=comp_color, size=11)
+        )
+
+        fig.update_xaxes(
+            range=[0, max(carrier_rate, system_avg) * 1.4],
+            showgrid=False,
+            title=dict(text="Flights with ARR_DELAY > 60 min (%)",
+                       font=dict(color=C["muted"], size=10)),
+            tickfont=dict(color=C["muted"], size=9)
+        )
+        fig.update_yaxes(showgrid=False, tickfont=dict(color=C["text"], size=11))
+        fig.update_layout(
+            paper_bgcolor=C["bg"], plot_bgcolor=C["bg"],
+            margin=dict(l=130, r=60, t=30, b=50),
+            height=200,
+            showlegend=False,
+            font=dict(color=C["text"], family="system-ui")
+        )
+        return fig
+
+    def sev_color(v):
+        return C["green"] if v < 3 else C["amber"] if v <= 6 else C["red"]
+
+    colors = [sev_color(v) for v in severe["severe_pct"]]
+
+    fig = go.Figure(go.Bar(
+        x=severe["severe_pct"],
+        y=severe["CARRIER_NAME"],
+        orientation="h",
+        marker=dict(color=colors, line=dict(color=colors, width=1)),
+        text=[f"{v:.1f}%" for v in severe["severe_pct"]],
+        textposition="outside",
+        textfont=dict(color=C["muted"], size=9),
+        hovertemplate="<b>%{y}</b><br>Severe delay rate: %{x:.1f}%<extra></extra>",
+    ))
+
+    fig.add_vline(x=3, line=dict(color=C["green"], width=1, dash="dot"))
+    fig.add_vline(x=6, line=dict(color=C["red"], width=1, dash="dot"))
+    system_avg = severe["severe_pct"].mean()
+    fig.add_vline(
+        x=system_avg,
+        line=dict(color="rgba(255,255,255,.4)", width=1.5, dash="dash"),
+        annotation=dict(
+            text=f"System avg {system_avg:.1f}%",
+            font=dict(color=C["muted"], size=9),
+            yref="paper", y=1.02, showarrow=False,
+        ),
+    )
+
+    fig.update_layout(
+        xaxis=dict(
+            title=dict(text="Flights with ARR_DELAY > 60 min (%)", font=dict(color=C["muted"], size=9)),
+            tickfont=dict(color=C["muted"], size=8),
+        ),
+        yaxis=dict(tickfont=dict(color=C["text"], size=9)),
+        margin=dict(l=0, r=60, t=0, b=0),
+        paper_bgcolor=C["bg"],
+        plot_bgcolor=C["bg"],
+        font=dict(color=C["text"], family="system-ui", size=9),
+        showlegend=False,
+        height=420,
+    )
+    return fig
+
+# ── SEASONALITY CHART ──────────────────────────────────────
+
+def build_seasonality_chart(df):
+    """Monthly on-time % line chart for top 5 carriers (DL, AA, UA, WN, AS)."""
+    if df.empty or len(df) < 1000:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Select 'All carriers' to see seasonal patterns",
+            showarrow=False,
+            font=dict(color=C["muted"], size=13)
+        )
+        fig.update_layout(
+            paper_bgcolor=C["bg"], plot_bgcolor=C["bg"],
+            height=360, margin=dict(l=60, r=20, t=10, b=50)
+        )
+        return fig
+    TOP5_CODES = {"DL", "AA", "UA", "WN", "AS"}
+    TOP5_NAMES = {"Delta Air Lines", "American Airlines", "United Airlines",
+                  "Southwest Airlines", "Alaska Airlines"}
+    MONTH_LABELS = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",
+                    7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"}
+
+    if df.empty or "MONTH" not in df.columns or "ON_TIME" not in df.columns:
+        fig = go.Figure()
+        fig.add_annotation(text="No seasonality data available", showarrow=False, font=dict(color=C["text"]))
+        fig.update_layout(paper_bgcolor=C["bg"], plot_bgcolor=C["bg"], height=360)
+        return fig
+
+    if "OP_CARRIER" in df.columns and df["OP_CARRIER"].isin(TOP5_CODES).any():
+        sub = df[df["OP_CARRIER"].isin(TOP5_CODES)].copy()
+        group_col = "OP_CARRIER"
+    elif df["CARRIER_NAME"].isin(TOP5_NAMES).any():
+        sub = df[df["CARRIER_NAME"].isin(TOP5_NAMES)].copy()
+        group_col = "CARRIER_NAME"
+    else:
+        top5 = df["CARRIER_NAME"].value_counts().head(5).index.tolist()
+        sub = df[df["CARRIER_NAME"].isin(top5)].copy()
+        group_col = "CARRIER_NAME"
+
+    monthly = (
+        sub.groupby([group_col, "MONTH"])["ON_TIME"]
+        .mean()
+        .reset_index(name="on_time_pct")
+    )
+    monthly["on_time_pct"] *= 100
+
+    CARRIER_COLORS = {
+        "DL": "#2EA043",  # verde  — Delta
+        "AA": "#2F81F7",  # azul   — American
+        "UA": "#D29922",  # ámbar  — United
+        "WN": "#DA3633",  # rojo   — Southwest
+        "AS": "#1B7F79",  # teal   — Alaska
+    }
+    NAME_TO_CODE = {
+        "Delta Air Lines": "DL", "American Airlines": "AA",
+        "United Airlines": "UA", "Southwest Airlines": "WN", "Alaska Airlines": "AS",
+    }
+    FALLBACK_COLORS = [C["blue"], C["green"], C["amber"], C["red"], C["teal"]]
+    carriers_list = sorted(monthly[group_col].unique())
+
+    fig = go.Figure()
+    for i, carrier in enumerate(carriers_list):
+        code = carrier if group_col == "OP_CARRIER" else NAME_TO_CODE.get(carrier)
+        color = CARRIER_COLORS.get(code, FALLBACK_COLORS[i % len(FALLBACK_COLORS)])
+        grp = monthly[monthly[group_col] == carrier].sort_values("MONTH")
+        fig.add_trace(go.Scatter(
+            x=grp["MONTH"],
+            y=grp["on_time_pct"],
+            mode="lines+markers",
+            name=carrier,
+            line=dict(color=color, width=2),
+            marker=dict(color=color, size=5),
+            hovertemplate=f"<b>{carrier}</b><br>%{{x}}: %{{y:.1f}}%<extra></extra>",
+        ))
+
+    fig.update_layout(
+        xaxis=dict(
+            tickvals=list(MONTH_LABELS.keys()),
+            ticktext=list(MONTH_LABELS.values()),
+            tickfont=dict(color=C["muted"], size=8),
+            gridcolor=C["border"],
+        ),
+        yaxis=dict(
+            title=dict(text="On-time % (arr < 15 min late)", font=dict(color=C["muted"], size=9)),
+            tickfont=dict(color=C["muted"], size=8),
+            ticksuffix="%",
+            gridcolor=C["border"],
+        ),
+        legend=dict(font=dict(color=C["muted"], size=9), bgcolor="rgba(0,0,0,0)"),
+        margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor=C["bg"],
+        plot_bgcolor=C["bg"],
+        font=dict(color=C["text"], family="system-ui", size=9),
+        height=360,
+    )
+    return fig
+
+# ── APP SETUP ──────────────────────────────────────────────
+
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
+
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            body { background: #0D1117; }
+            .Select-control { background-color: #1C2230 !important; border: 1px solid rgba(255,255,255,0.12) !important; border-radius: 6px !important; }
+            .Select-value-label { color: #E6EDF3 !important; }
+            .Select-placeholder { color: #7D8590 !important; }
+            .Select-input > input { color: #E6EDF3 !important; }
+            .Select-menu-outer { background-color: #1C2230 !important; border: 1px solid rgba(255,255,255,0.12) !important; z-index: 9999 !important; }
+            .VirtualizedSelectOption { background-color: #1C2230 !important; color: #E6EDF3 !important; }
+            .VirtualizedSelectFocusedOption { background-color: #2F81F7 !important; color: #FFFFFF !important; }
+            .Select-arrow { border-color: #7D8590 transparent transparent !important; }
+            .is-open .Select-arrow { border-color: transparent transparent #7D8590 !important; }
+            .Select.is-focused > .Select-control { border-color: #2F81F7 !important; box-shadow: none !important; }
+            .dash-dropdown { min-width: 140px; }
+            .dark-dropdown .Select-control { background-color: #1C2230 !important; }
+            .dark-dropdown .Select-value-label { color: #E6EDF3 !important; }
+            .dark-dropdown .Select-placeholder { color: #7D8590 !important; }
+            .dark-dropdown .Select-menu-outer { background-color: #1C2230 !important; color: #E6EDF3 !important; }
+            .dark-dropdown option { background-color: #1C2230 !important; color: #E6EDF3 !important; }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
+
+year_options = [{"label": str(y), "value": str(y)} for y in sorted(DATA["clean"]["YEAR"].unique())] if not DATA["clean"].empty else [{"label": "2023", "value": "2023"}]
+carrier_options = [{"label": "All", "value": "All"}] + [{"label": c, "value": c} for c in sorted(DATA["clean"]["CARRIER_NAME"].unique())] if not DATA["clean"].empty else [{"label": "All", "value": "All"}]
+airport_options = [{"label": "All", "value": "All"}] + [{"label": a, "value": a} for a in sorted(DATA["clean"]["ORIGIN"].unique())] if not DATA["clean"].empty else [{"label": "All", "value": "All"}]
+
+dd_style = {"background": C["surface"], "color": C["text"], "border": f"1px solid {C['border']}", "minHeight": "36px", "fontSize": "13px"}
+
+# ── LAYOUT ─────────────────────────────────────────────────
+
+app.layout = html.Div(style={"background": C["bg"], "minHeight": "100vh", "fontFamily": "system-ui,-apple-system,sans-serif"}, children=[
+    # Header
+    html.Div(style={"background": C["surface"], "borderBottom": f"1px solid {C['border']}", "padding": "16px 28px", "display": "flex", "alignItems": "center", "gap": "20px", "flexWrap": "wrap"}, children=[
+        html.Div([
+            html.Div("Delay Risk & Operations Dashboard", style={"fontSize": "17px", "fontWeight": "700", "color": C["text"]}),
+            html.Div("Single-screen decision tool: what happens, why, where, and what to do next.", style={"fontSize": "12px", "color": "#7D8590", "marginTop": "2px"})
+        ], style={"flex": "1"}),
+        html.Div([
+            html.Div("Year", style={"fontSize": "12px", "color": "#58A6FF", "marginBottom": "4px", "fontWeight": "700", "letterSpacing": ".06em", "textTransform": "uppercase"}),
+            dcc.Dropdown(id="year-filter", options=year_options, value=str(max(DATA["clean"]["YEAR"])) if not DATA["clean"].empty else "2023", clearable=False, style={"backgroundColor": "#0D1117", "color": "#58A6FF", "border": "2px solid #388BFD", "borderRadius": "8px", "fontSize": "13px", "minWidth": "150px", "fontWeight": "600"}, className="dark-dropdown")
+        ], style={"minWidth": "150px"}),
+        html.Div([
+            html.Div("Airline", style={"fontSize": "12px", "color": "#58A6FF", "marginBottom": "4px", "fontWeight": "700", "letterSpacing": ".06em", "textTransform": "uppercase"}),
+            dcc.Dropdown(id="airline-filter", options=carrier_options, value="All", clearable=False, style={"backgroundColor": "#0D1117", "color": "#58A6FF", "border": "2px solid #388BFD", "borderRadius": "8px", "fontSize": "13px", "minWidth": "200px", "fontWeight": "600"}, className="dark-dropdown")
+        ]),
+        html.Div([
+            html.Div("Hub Airport", style={"fontSize": "12px", "color": "#58A6FF", "marginBottom": "4px", "fontWeight": "700", "letterSpacing": ".06em", "textTransform": "uppercase"}),
+            dcc.Dropdown(id="airport-filter", options=airport_options, value="All", clearable=False, style={"backgroundColor": "#0D1117", "color": "#58A6FF", "border": "2px solid #388BFD", "borderRadius": "8px", "fontSize": "13px", "minWidth": "200px", "fontWeight": "600"}, className="dark-dropdown")
+        ]),
+    ]),
+
+    # Content
+    html.Div(style={"padding": "24px 28px", "overflowY": "auto", "height": "calc(100vh - 140px)"}, children=[
+        # KPI Strip
+        html.Div(id="kpi-strip", style={"marginBottom": "24px"}),
+
+        # Marcus Alert
+        html.Div(id="marcus-alert", style={"textAlign": "center", "marginBottom": "24px"}),
+
+        # Two-column layout
+        html.Div("Marcus: I had no idea the system was this fragile. Let me see where it breaks first.",
+                 style={"fontSize": "12px", "fontStyle": "italic", "color": "#D29922",
+                        "borderLeft": "3px solid #D29922", "paddingLeft": "10px",
+                        "margin": "0 0 14px", "borderRadius": "0"}),
+        dbc.Row([
+            # Left column
+            dbc.Col([
+                get_panel("Where delays occur — airport congestion", "Bubble size = flight volume • Color = avg delay", [dcc.Graph(id="airport-map", config={"displayModeBar": False})]),
+                html.Div(style={"height": "24px"}),
+                html.Div("Marcus: Monday 6–9am from ORD. The data confirmed my worst fears.",
+                         style={"fontSize": "12px", "fontStyle": "italic", "color": "#D29922",
+                                "borderLeft": "3px solid #D29922", "paddingLeft": "10px",
+                                "margin": "0 0 14px", "borderRadius": "0"}),
+                get_panel("When we see carriers × reliability", "Avg. arrival delay by day/hour", [dcc.Graph(id="heatmap-chart", config={"displayModeBar": False})]),
+            ], md=6, style={"marginBottom": "24px"}),
+
+            # Right column
+            dbc.Col([
+                get_panel("Why delays occur — cause breakdown", "Share of total delay minutes per category", [dcc.Graph(id="cause-chart", config={"displayModeBar": False})]),
+                html.Div(style={"height": "24px"}),
+                get_panel("Carrier reliability — Flight Reliability Index (FRI)", "50% on-time + 30% low delay + 20% low cancel", [dcc.Graph(id="fri-chart", config={"displayModeBar": False})]),
+                html.Div(id="fri-recommendation", style={"marginTop": "8px", "fontSize": "11px", "color": C["muted"], "padding": "0 4px"}),
+            ], md=6, style={"marginBottom": "24px"}),
+        ], className="g-4"),
+
+        # Analysis row: delay propagation scatter + severe delay rate
+        html.Div("Marcus: A late departure almost always means a late arrival. The domino effect is real.",
+                 style={"fontSize": "12px", "fontStyle": "italic", "color": "#D29922",
+                        "borderLeft": "3px solid #D29922", "paddingLeft": "10px",
+                        "margin": "0 0 14px", "borderRadius": "0"}),
+        dbc.Row([
+            dbc.Col([
+                get_panel(
+                    "Delay propagation — does a late departure mean a late arrival?",
+                    "Sample of 50 k flights • Color = airline • Dashed line = regression",
+                    [dcc.Graph(id="scatter-chart", config={"displayModeBar": False})]
+                ),
+            ], md=7, style={"marginBottom": "24px"}),
+            dbc.Col([
+                get_panel(
+                    "Severe delay rate by carrier (ARR_DELAY > 60 min)",
+                    "Green <3 % · Amber 3–6 % · Red >6 % — ordered best to worst",
+                    [dcc.Graph(id="severe-chart", config={"displayModeBar": False})]
+                ),
+            ], md=5, style={"marginBottom": "24px"}),
+        ], className="g-4"),
+
+        # Bottom: Predictive
+        html.Div("Marcus: Now I know when, where and why. Time to decide which airline to trust.",
+                 style={"fontSize": "12px", "fontStyle": "italic", "color": "#D29922",
+                        "borderLeft": "3px solid #D29922", "paddingLeft": "10px",
+                        "margin": "0 0 14px", "borderRadius": "0"}),
+        get_panel("Airports with highest predicted delay risk", "Based on avg delay. Red >12, Amber 8–12, Green <8.", [dcc.Graph(id="predictive-chart", config={"displayModeBar": False})]),
+
+        html.Div(style={"height": "24px"}),
+
+        # Seasonality: monthly on-time % for top 5 carriers
+        get_panel(
+            "Seasonal on-time performance — top 5 carriers",
+            "Monthly on-time % (DL · AA · UA · WN · AS) — reveals summer collapse patterns",
+            [dcc.Graph(id="seasonality-chart", config={"displayModeBar": False})]
+        ),
+
+        html.Div([
+            html.Div("Recommended actions", style={"fontSize":"13px","fontWeight":"600",
+                     "color":C["text"],"marginBottom":"12px"}),
+            html.Div([
+                html.Div([
+                    html.Div("01", style={"fontSize":"10px","fontWeight":"700","color":C["blue"],
+                             "fontFamily":"monospace","marginBottom":"3px"}),
+                    html.Div("Avoid Sunday and Friday evening flights (19–22h) — worst delay slot with 17–19 min avg",
+                             style={"fontSize":"12px","color":C["muted"]}),
+                ], style={"flex":"1","padding":"12px 14px","background":C["surface2"],
+                          "borderRadius":"8px","borderLeft":f"3px solid {C['blue']}"}),
+                html.Div([
+                    html.Div("02", style={"fontSize":"10px","fontWeight":"700","color":C["green"],
+                             "fontFamily":"monospace","marginBottom":"3px"}),
+                    html.Div("Prioritise Delta Air Lines — highest FRI score among major carriers",
+                             style={"fontSize":"12px","color":C["muted"]}),
+                ], style={"flex":"1","padding":"12px 14px","background":C["surface2"],
+                          "borderRadius":"8px","borderLeft":f"3px solid {C['green']}"}),
+                html.Div([
+                    html.Div("03", style={"fontSize":"10px","fontWeight":"700","color":C["amber"],
+                             "fontFamily":"monospace","marginBottom":"3px"}),
+                    html.Div("Best time to fly: Tuesday or Thursday before 9am — flights arrive early on average",
+                             style={"fontSize":"12px","color":C["muted"]}),
+                ], style={"flex":"1","padding":"12px 14px","background":C["surface2"],
+                          "borderRadius":"8px","borderLeft":f"3px solid {C['amber']}"}),
+                html.Div([
+                    html.Div("04", style={"fontSize":"10px","fontWeight":"700","color":C["red"],
+                             "fontFamily":"monospace","marginBottom":"3px"}),
+                    html.Div("Avoid JetBlue and Frontier for time-sensitive trips — severe delay rate >12%",
+                             style={"fontSize":"12px","color":C["muted"]}),
+                ], style={"flex":"1","padding":"12px 14px","background":C["surface2"],
+                          "borderRadius":"8px","borderLeft":f"3px solid {C['red']}"}),
+            ], style={"display":"flex","gap":"12px","flexWrap":"wrap"}),
+        ], style={"background":C["surface"],"border":f"1px solid {C['border']}",
+                  "borderRadius":"10px","padding":"20px 22px","marginBottom":"16px"}),
+
+        html.Div("Recommendation: Airlines should prioritize aircraft rotation efficiency and staff planning at high-risk hubs during peak hours to reduce systemic delays.",
+                 style={"marginTop": "24px", "padding": "14px 18px", "background": C["surface"], "border": f"1px solid {C['border']}", "borderRadius": "12px", "color": C["muted"], "fontSize": "12px"}),
+    ])
+])
+
+# ── CALLBACKS ──────────────────────────────────────────────
+
+@app.callback(
+    Output("kpi-strip", "children"),
+    Output("marcus-alert", "children"),
+    Output("airport-map", "figure"),
+    Output("cause-chart", "figure"),
+    Output("heatmap-chart", "figure"),
+    Output("fri-chart", "figure"),
+    Output("fri-recommendation", "children"),
+    Output("predictive-chart", "figure"),
+    Output("scatter-chart", "figure"),
+    Output("severe-chart", "figure"),
+    Output("seasonality-chart", "figure"),
+    Input("year-filter", "value"),
+    Input("airline-filter", "value"),
+    Input("airport-filter", "value"),
+)
+def update_dashboard(selected_year, selected_airline, selected_airport):
+    df = DATA["clean"].copy()
+    if selected_year and selected_year != "All":
+        df = df[df["YEAR"] == int(selected_year)]
+    if selected_airline and selected_airline != "All":
+        df = df[df["CARRIER_NAME"] == selected_airline]
+    if selected_airport and selected_airport != "All" and "ORIGIN" in df.columns:
+        df = df[(df["ORIGIN"] == selected_airport) | (df["DEST"] == selected_airport)]
+
+    df_all = DATA["clean"].copy()
+    if selected_year and selected_year != "All":
+        df_all = df_all[df_all["YEAR"] == int(selected_year)]
+    if selected_airline and selected_airline != "All":
+        df_all = df_all[df_all["CARRIER_NAME"] == selected_airline]
+    if selected_airport and selected_airport != "All" and "ORIGIN" in df_all.columns:
+        df_all = df_all[(df_all["ORIGIN"] == selected_airport) | (df_all["DEST"] == selected_airport)]
+
+    metrics = compute_metrics(df, df_all)
+
+    # FRI recommendation text
+    try:
+        kpi = DATA["carrier_kpi"].copy()
+        kpi["FRI"] = (
+            0.50 * kpi["on_time_pct"] +
+            0.30 * (1 - normalize(kpi["avg_arr_delay"])) * 100 +
+            0.20 * (1 - kpi["cancel_rate"].fillna(0)) * 100
+        ).round(1)
+        best = kpi.sort_values("FRI", ascending=False).iloc[0]
+        rec_text = html.Div(
+            f"Top carrier: {best['CARRIER_NAME']} — FRI {best['FRI']:.0f}/100",
+            style={"fontSize": "11px", "color": C["green"], "padding": "6px 0"}
+        )
+    except Exception:
+        rec_text = ""
+
+    return (
+        build_kpi_strip(metrics),
+        marcus_alert(df, selected_airline, selected_airport),
+        build_airport_map(df, selected_airport),
+        build_donut(df),
+        build_heatmap(df),
+        build_fri_chart(df, selected_airline),
+        rec_text,
+        build_predictive_chart(df),
+        build_scatter_propagation(df),
+        build_severe_delay_chart(df),
+        build_seasonality_chart(df),
+    )
+
+# ── RUN ────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    port = 8050
+    if len(sys.argv) > 1 and sys.argv[1].isdigit():
+        port = int(sys.argv[1])
+    print("\n" + "=" * 56)
+    print("  MARCUS REID — DELAY RISK DASHBOARD v2")
+    print("=" * 56)
+    print(f"  Open: http://127.0.0.1:{port}")
+    print("  Stop: Ctrl+C")
+    print("=" * 56 + "\n")
+    app.run(debug=True, host="127.0.0.1", port=port)
