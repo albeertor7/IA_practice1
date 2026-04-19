@@ -1012,6 +1012,17 @@ app.index_string = '''
             {%scripts%}
             {%renderer%}
         </footer>
+        <script>
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'ArrowRight') {
+                    var btn = document.getElementById('btn-next');
+                    if (btn) btn.click();
+                } else if (e.key === 'ArrowLeft') {
+                    var btn = document.getElementById('btn-prev');
+                    if (btn) btn.click();
+                }
+            });
+        </script>
     </body>
 </html>
 '''
@@ -1076,9 +1087,8 @@ app.layout = html.Div(style={"background": C["bg"], "minHeight": "100vh", "fontF
         ]),
     ]),
 
-    # Stores
+    # Slide store
     dcc.Store(id="current-slide", data=0),
-    dcc.Store(id="keyboard-listener", data=""),
 
     # Slide content area
     html.Div(id="slide-content", style={
@@ -1584,29 +1594,6 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
     return content, indicator, counter
 
 
-# ── KEYBOARD NAVIGATION (clientside) ──────────────────────
-
-app.clientside_callback(
-    """
-    function(n) {
-        if (!window._kbNavSetup) {
-            window._kbNavSetup = true;
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'ArrowRight') {
-                    var btn = document.getElementById('btn-next');
-                    if (btn) btn.click();
-                } else if (e.key === 'ArrowLeft') {
-                    var btn = document.getElementById('btn-prev');
-                    if (btn) btn.click();
-                }
-            });
-        }
-        return n;
-    }
-    """,
-    Output("keyboard-listener", "data"),
-    Input("keyboard-listener", "data"),
-)
 
 # ── RUN ────────────────────────────────────────────────────
 
