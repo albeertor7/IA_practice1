@@ -1022,14 +1022,28 @@ airport_options = [{"label": "All", "value": "All"}] + [{"label": a, "value": a}
 
 dd_style = {"background": C["surface"], "color": C["text"], "border": f"1px solid {C['border']}", "minHeight": "36px", "fontSize": "13px"}
 
+# ── SLIDE TITLES ───────────────────────────────────────────
+
+SLIDE_TITLES = {
+    1: "01 — The System",
+    2: "02 — Where it breaks",
+    3: "03 — Why it breaks",
+    4: "04 — When it breaks",
+    5: "05 — Who to trust",
+    6: "06 — The domino effect",
+    7: "07 — The full picture",
+    8: "08 — Marcus decides",
+}
+TOTAL_SLIDES = 8
+
 # ── LAYOUT ─────────────────────────────────────────────────
 
 app.layout = html.Div(style={"background": C["bg"], "minHeight": "100vh", "fontFamily": "system-ui,-apple-system,sans-serif"}, children=[
-    # Header
+    # Topbar — filters unchanged
     html.Div(style={"background": C["surface"], "borderBottom": f"1px solid {C['border']}", "padding": "16px 28px", "display": "flex", "alignItems": "center", "gap": "20px", "flexWrap": "wrap"}, children=[
         html.Div([
             html.Div("Delay Risk & Operations Dashboard", style={"fontSize": "17px", "fontWeight": "700", "color": C["text"]}),
-            html.Div("Single-screen decision tool: what happens, why, where, and what to do next.", style={"fontSize": "12px", "color": "#7D8590", "marginTop": "2px"})
+            html.Div("Marcus Reid's data journey — use arrows to navigate.", style={"fontSize": "12px", "color": "#7D8590", "marginTop": "2px"})
         ], style={"flex": "1"}),
         html.Div([
             html.Div("Year", style={"fontSize": "12px", "color": "#58A6FF", "marginBottom": "4px", "fontWeight": "700", "letterSpacing": ".06em", "textTransform": "uppercase"}),
@@ -1045,138 +1059,153 @@ app.layout = html.Div(style={"background": C["bg"], "minHeight": "100vh", "fontF
         ]),
     ]),
 
-    # Content
-    html.Div(style={"padding": "24px 28px", "overflowY": "auto", "height": "calc(100vh - 140px)"}, children=[
-        # KPI Strip
-        html.Div(id="kpi-strip", style={"marginBottom": "24px"}),
+    # Slide store
+    dcc.Store(id="current-slide", data=1),
 
-        # Marcus Alert
-        html.Div(id="marcus-alert", style={"textAlign": "center", "marginBottom": "24px"}),
+    # Slide content area
+    html.Div(id="slide-content", style={
+        "padding": "32px 40px 100px 40px",
+        "overflowY": "auto",
+        "height": "calc(100vh - 80px)",
+    }),
 
-        # Two-column layout
-        html.Div("Marcus: I had no idea the system was this fragile. Let me see where it breaks first.",
-                 style={"fontSize": "12px", "fontStyle": "italic", "color": "#D29922",
-                        "borderLeft": "3px solid #D29922", "paddingLeft": "10px",
-                        "margin": "0 0 14px", "borderRadius": "0"}),
-        dbc.Row([
-            # Left column
-            dbc.Col([
-                get_panel("Where delays occur — airport congestion", "Bubble size = flight volume • Color = avg delay", [dcc.Graph(id="airport-map", config={"displayModeBar": False})]),
-                html.Div(style={"height": "24px"}),
-                html.Div("Marcus: Monday 6–9am from ORD. The data confirmed my worst fears.",
-                         style={"fontSize": "12px", "fontStyle": "italic", "color": "#D29922",
-                                "borderLeft": "3px solid #D29922", "paddingLeft": "10px",
-                                "margin": "0 0 14px", "borderRadius": "0"}),
-                get_panel("When we see carriers × reliability", "Avg. arrival delay by day/hour", [dcc.Graph(id="heatmap-chart", config={"displayModeBar": False})]),
-            ], md=6, style={"marginBottom": "24px"}),
-
-            # Right column
-            dbc.Col([
-                get_panel("Why delays occur — cause breakdown", "Share of total delay minutes per category", [dcc.Graph(id="cause-chart", config={"displayModeBar": False})]),
-                html.Div(style={"height": "24px"}),
-                get_panel("Carrier reliability — Flight Reliability Index (FRI)", "50% on-time + 30% low delay + 20% low cancel", [dcc.Graph(id="fri-chart", config={"displayModeBar": False})]),
-                html.Div(id="fri-recommendation", style={"marginTop": "8px", "fontSize": "11px", "color": C["muted"], "padding": "0 4px"}),
-            ], md=6, style={"marginBottom": "24px"}),
-        ], className="g-4"),
-
-        # Analysis row: delay propagation scatter + severe delay rate
-        html.Div("Marcus: A late departure almost always means a late arrival. The domino effect is real.",
-                 style={"fontSize": "12px", "fontStyle": "italic", "color": "#D29922",
-                        "borderLeft": "3px solid #D29922", "paddingLeft": "10px",
-                        "margin": "0 0 14px", "borderRadius": "0"}),
-        dbc.Row([
-            dbc.Col([
-                get_panel(
-                    "Delay propagation — does a late departure mean a late arrival?",
-                    "Sample of 50 k flights • Color = airline • Dashed line = regression",
-                    [dcc.Graph(id="scatter-chart", config={"displayModeBar": False})]
-                ),
-            ], md=7, style={"marginBottom": "24px"}),
-            dbc.Col([
-                get_panel(
-                    "Severe delay rate by carrier (ARR_DELAY > 60 min)",
-                    "Green <3 % · Amber 3–6 % · Red >6 % — ordered best to worst",
-                    [dcc.Graph(id="severe-chart", config={"displayModeBar": False})]
-                ),
-            ], md=5, style={"marginBottom": "24px"}),
-        ], className="g-4"),
-
-        # Bottom: Predictive
-        html.Div("Marcus: Now I know when, where and why. Time to decide which airline to trust.",
-                 style={"fontSize": "12px", "fontStyle": "italic", "color": "#D29922",
-                        "borderLeft": "3px solid #D29922", "paddingLeft": "10px",
-                        "margin": "0 0 14px", "borderRadius": "0"}),
-        get_panel("Airports with highest predicted delay risk", "Based on avg delay. Red >12, Amber 8–12, Green <8.", [dcc.Graph(id="predictive-chart", config={"displayModeBar": False})]),
-
-        html.Div(style={"height": "24px"}),
-
-        # Seasonality: monthly on-time % for top 5 carriers
-        get_panel(
-            "Seasonal on-time performance — top 5 carriers",
-            "Monthly on-time % (DL · AA · UA · WN · AS) — reveals summer collapse patterns",
-            [dcc.Graph(id="seasonality-chart", config={"displayModeBar": False})]
-        ),
-
-        html.Div([
-            html.Div("Recommended actions", style={"fontSize":"13px","fontWeight":"600",
-                     "color":C["text"],"marginBottom":"12px"}),
-            html.Div([
-                html.Div([
-                    html.Div("01", style={"fontSize":"10px","fontWeight":"700","color":C["blue"],
-                             "fontFamily":"monospace","marginBottom":"3px"}),
-                    html.Div("Avoid Sunday and Friday evening flights (19–22h) — worst delay slot with 17–19 min avg",
-                             style={"fontSize":"12px","color":C["muted"]}),
-                ], style={"flex":"1","padding":"12px 14px","background":C["surface2"],
-                          "borderRadius":"8px","borderLeft":f"3px solid {C['blue']}"}),
-                html.Div([
-                    html.Div("02", style={"fontSize":"10px","fontWeight":"700","color":C["green"],
-                             "fontFamily":"monospace","marginBottom":"3px"}),
-                    html.Div("Prioritise Delta Air Lines — highest FRI score among major carriers",
-                             style={"fontSize":"12px","color":C["muted"]}),
-                ], style={"flex":"1","padding":"12px 14px","background":C["surface2"],
-                          "borderRadius":"8px","borderLeft":f"3px solid {C['green']}"}),
-                html.Div([
-                    html.Div("03", style={"fontSize":"10px","fontWeight":"700","color":C["amber"],
-                             "fontFamily":"monospace","marginBottom":"3px"}),
-                    html.Div("Best time to fly: Tuesday or Thursday before 9am — flights arrive early on average",
-                             style={"fontSize":"12px","color":C["muted"]}),
-                ], style={"flex":"1","padding":"12px 14px","background":C["surface2"],
-                          "borderRadius":"8px","borderLeft":f"3px solid {C['amber']}"}),
-                html.Div([
-                    html.Div("04", style={"fontSize":"10px","fontWeight":"700","color":C["red"],
-                             "fontFamily":"monospace","marginBottom":"3px"}),
-                    html.Div("Avoid JetBlue and Frontier for time-sensitive trips — severe delay rate >12%",
-                             style={"fontSize":"12px","color":C["muted"]}),
-                ], style={"flex":"1","padding":"12px 14px","background":C["surface2"],
-                          "borderRadius":"8px","borderLeft":f"3px solid {C['red']}"}),
-            ], style={"display":"flex","gap":"12px","flexWrap":"wrap"}),
-        ], style={"background":C["surface"],"border":f"1px solid {C['border']}",
-                  "borderRadius":"10px","padding":"20px 22px","marginBottom":"16px"}),
-
-        html.Div("Recommendation: Airlines should prioritize aircraft rotation efficiency and staff planning at high-risk hubs during peak hours to reduce systemic delays.",
-                 style={"marginTop": "24px", "padding": "14px 18px", "background": C["surface"], "border": f"1px solid {C['border']}", "borderRadius": "12px", "color": C["muted"], "fontSize": "12px"}),
-    ])
+    # Fixed bottom navigation bar
+    html.Div([
+        html.Button("← Previous", id="btn-prev", n_clicks=0, style={
+            "background": "transparent",
+            "border": f"1px solid {C['border']}",
+            "color": C["text"],
+            "padding": "8px 22px",
+            "borderRadius": "6px",
+            "fontSize": "13px",
+            "fontWeight": "600",
+            "cursor": "pointer",
+            "fontFamily": "system-ui,-apple-system,sans-serif",
+        }),
+        html.Div(id="slide-indicator", style={
+            "color": C["muted"],
+            "fontSize": "13px",
+            "fontWeight": "500",
+            "minWidth": "260px",
+            "textAlign": "center",
+            "letterSpacing": ".02em",
+        }),
+        html.Button("Next →", id="btn-next", n_clicks=0, style={
+            "background": C["blue"],
+            "border": "none",
+            "color": "#fff",
+            "padding": "8px 22px",
+            "borderRadius": "6px",
+            "fontSize": "13px",
+            "fontWeight": "600",
+            "cursor": "pointer",
+            "fontFamily": "system-ui,-apple-system,sans-serif",
+        }),
+    ], style={
+        "position": "fixed",
+        "bottom": "0",
+        "left": "0",
+        "right": "0",
+        "display": "flex",
+        "justifyContent": "center",
+        "alignItems": "center",
+        "gap": "20px",
+        "padding": "14px",
+        "background": "rgba(13,17,23,0.97)",
+        "borderTop": f"1px solid {C['border']}",
+        "zIndex": "1000",
+    }),
 ])
 
 # ── CALLBACKS ──────────────────────────────────────────────
 
 @app.callback(
-    Output("kpi-strip", "children"),
-    Output("marcus-alert", "children"),
-    Output("airport-map", "figure"),
-    Output("cause-chart", "figure"),
-    Output("heatmap-chart", "figure"),
-    Output("fri-chart", "figure"),
-    Output("fri-recommendation", "children"),
-    Output("predictive-chart", "figure"),
-    Output("scatter-chart", "figure"),
-    Output("severe-chart", "figure"),
-    Output("seasonality-chart", "figure"),
+    Output("current-slide", "data"),
+    Output("slide-indicator", "children"),
+    Input("btn-prev", "n_clicks"),
+    Input("btn-next", "n_clicks"),
+    State("current-slide", "data"),
+    prevent_initial_call=True,
+)
+def navigate(prev, next_, current):
+    ctx = dash.callback_context
+    btn = ctx.triggered[0]["prop_id"]
+    new = min(current + 1, TOTAL_SLIDES) if "next" in btn else max(current - 1, 1)
+    return new, f"{SLIDE_TITLES[new]}  ·  {new} / {TOTAL_SLIDES}"
+
+
+def _marcus_quote(text):
+    return html.Div(
+        f'Marcus: "{text}"',
+        style={
+            "fontSize": "13px",
+            "fontStyle": "italic",
+            "color": C["amber"],
+            "borderLeft": "3px solid #D29922",
+            "paddingLeft": "12px",
+            "marginBottom": "20px",
+            "lineHeight": "1.6",
+        }
+    )
+
+
+def _slide_title(text):
+    return html.Div(text, style={
+        "fontSize": "22px",
+        "fontWeight": "700",
+        "color": C["text"],
+        "marginBottom": "16px",
+        "letterSpacing": "-.01em",
+    })
+
+
+def _actions_panel():
+    actions = [
+        ("01", C["blue"],  "Avoid Sunday and Friday evening flights (19–22h) — worst delay slot with 17–19 min avg"),
+        ("02", C["green"], "Prioritise Delta Air Lines — highest FRI score among major carriers"),
+        ("03", C["amber"], "Best time to fly: Tuesday or Thursday before 9am — flights arrive early on average"),
+        ("04", C["red"],   "Avoid JetBlue and Frontier for time-sensitive trips — severe delay rate >12%"),
+    ]
+    cards = []
+    for num, color, text in actions:
+        cards.append(html.Div([
+            html.Div(num, style={"fontSize": "11px", "fontWeight": "700", "color": color,
+                                 "fontFamily": "monospace", "marginBottom": "6px"}),
+            html.Div(text, style={"fontSize": "14px", "color": C["muted"], "lineHeight": "1.5"}),
+        ], style={
+            "flex": "1",
+            "padding": "20px 22px",
+            "background": C["surface2"],
+            "borderRadius": "10px",
+            "borderLeft": f"4px solid {color}",
+            "minWidth": "200px",
+        }))
+    return html.Div([
+        html.Div("Recommended actions", style={"fontSize": "16px", "fontWeight": "600",
+                                               "color": C["text"], "marginBottom": "20px"}),
+        html.Div(cards, style={"display": "flex", "gap": "16px", "flexWrap": "wrap"}),
+        html.Div(
+            "Recommendation: Airlines should prioritize aircraft rotation efficiency and staff planning "
+            "at high-risk hubs during peak hours to reduce systemic delays.",
+            style={"marginTop": "28px", "padding": "16px 20px", "background": C["surface"],
+                   "border": f"1px solid {C['border']}", "borderRadius": "12px",
+                   "color": C["muted"], "fontSize": "13px", "lineHeight": "1.6"}
+        ),
+    ], style={"background": C["surface"], "border": f"1px solid {C['border']}",
+              "borderRadius": "12px", "padding": "28px 32px"})
+
+
+@app.callback(
+    Output("slide-content", "children"),
+    Output("slide-indicator", "children", allow_duplicate=True),
+    Input("current-slide", "data"),
     Input("year-filter", "value"),
     Input("airline-filter", "value"),
     Input("airport-filter", "value"),
+    prevent_initial_call="initial_duplicate",
 )
-def update_dashboard(selected_year, selected_airline, selected_airport):
+def render_slide(slide, selected_year, selected_airline, selected_airport):
+    # ── filter df ──
     df = DATA["clean"].copy()
     if selected_year and selected_year != "All":
         df = df[df["YEAR"] == int(selected_year)]
@@ -1195,7 +1224,7 @@ def update_dashboard(selected_year, selected_airline, selected_airport):
 
     metrics = compute_metrics(df, df_all)
 
-    # FRI recommendation text
+    # ── FRI rec text ──
     try:
         kpi = DATA["carrier_kpi"].copy()
         kpi["FRI"] = (
@@ -1204,26 +1233,144 @@ def update_dashboard(selected_year, selected_airline, selected_airport):
             0.20 * (1 - kpi["cancel_rate"].fillna(0)) * 100
         ).round(1)
         best = kpi.sort_values("FRI", ascending=False).iloc[0]
-        rec_text = html.Div(
+        fri_rec = html.Div(
             f"Top carrier: {best['CARRIER_NAME']} — FRI {best['FRI']:.0f}/100",
-            style={"fontSize": "11px", "color": C["green"], "padding": "6px 0"}
+            style={"fontSize": "12px", "color": C["green"], "padding": "6px 0"}
         )
     except Exception:
-        rec_text = ""
+        fri_rec = ""
 
-    return (
-        build_kpi_strip(metrics),
-        marcus_alert(df, selected_airline, selected_airport),
-        build_airport_map(df, selected_airport),
-        build_donut(df),
-        build_heatmap(df),
-        build_fri_chart(df, selected_airline),
-        rec_text,
-        build_predictive_chart(df),
-        build_scatter_propagation(df),
-        build_severe_delay_chart(df),
-        build_seasonality_chart(df),
-    )
+    indicator = f"{SLIDE_TITLES[slide]}  ·  {slide} / {TOTAL_SLIDES}"
+
+    # ── Slide 1: The System ──
+    if slide == 1:
+        content = html.Div([
+            _marcus_quote("I had no idea the system was this broken."),
+            _slide_title("The System"),
+            html.Div(id="kpi-strip-s1", children=build_kpi_strip(metrics), style={"marginBottom": "24px"}),
+            html.Div(id="marcus-alert-s1", children=marcus_alert(df, selected_airline, selected_airport)),
+        ])
+
+    # ── Slide 2: Where it breaks ──
+    elif slide == 2:
+        content = html.Div([
+            _marcus_quote("Florida is a nightmare. My hub ORD is surprisingly safe."),
+            _slide_title("Where it breaks"),
+            get_panel(
+                "Where delays occur — airport congestion",
+                "Bubble size = flight volume • Color = avg delay",
+                [dcc.Graph(figure=build_airport_map(df, selected_airport),
+                           config={"displayModeBar": False},
+                           style={"height": "520px"})]
+            ),
+        ])
+
+    # ── Slide 3: Why it breaks ──
+    elif slide == 3:
+        content = html.Div([
+            _marcus_quote("67% of delays are the airline's fault. I can fix this."),
+            _slide_title("Why it breaks"),
+            html.Div(
+                get_panel(
+                    "Why delays occur — cause breakdown",
+                    "Share of total delay minutes per category",
+                    [dcc.Graph(figure=build_donut(df),
+                               config={"displayModeBar": False},
+                               style={"height": "480px"})]
+                ),
+                style={"maxWidth": "800px", "margin": "0 auto"}
+            ),
+        ])
+
+    # ── Slide 4: When it breaks ──
+    elif slide == 4:
+        content = html.Div([
+            _marcus_quote("I always book Friday afternoon. That's the worst slot of the week."),
+            _slide_title("When it breaks"),
+            get_panel(
+                "When delays peak — day × hour heatmap",
+                "Avg. arrival delay by day/hour",
+                [dcc.Graph(figure=build_heatmap(df),
+                           config={"displayModeBar": False},
+                           style={"height": "460px"})]
+            ),
+        ])
+
+    # ── Slide 5: Who to trust ──
+    elif slide == 5:
+        content = html.Div([
+            _marcus_quote("43 points separate Delta from Frontier. I had no idea."),
+            _slide_title("Who to trust"),
+            get_panel(
+                "Carrier reliability — Flight Reliability Index (FRI)",
+                "50% on-time + 30% low delay + 20% low cancel",
+                [dcc.Graph(figure=build_fri_chart(df, selected_airline),
+                           config={"displayModeBar": False},
+                           style={"height": "520px"})]
+            ),
+            html.Div(fri_rec, style={"marginTop": "10px", "paddingLeft": "4px"}),
+        ])
+
+    # ── Slide 6: The domino effect ──
+    elif slide == 6:
+        content = html.Div([
+            _marcus_quote("Board late. Arrive late. JetBlue is the worst offender."),
+            _slide_title("The domino effect"),
+            dbc.Row([
+                dbc.Col(
+                    get_panel(
+                        "Delay propagation — dep vs arr delay",
+                        "Sample of 50 k flights • Color = airline • Dashed = regression",
+                        [dcc.Graph(figure=build_scatter_propagation(df),
+                                   config={"displayModeBar": False},
+                                   style={"height": "440px"})]
+                    ),
+                    md=7, style={"marginBottom": "16px"}
+                ),
+                dbc.Col(
+                    get_panel(
+                        "Severe delay rate by carrier (ARR_DELAY > 60 min)",
+                        "Green <3 % · Amber 3–6 % · Red >6 %",
+                        [dcc.Graph(figure=build_severe_delay_chart(df),
+                                   config={"displayModeBar": False},
+                                   style={"height": "440px"})]
+                    ),
+                    md=5, style={"marginBottom": "16px"}
+                ),
+            ], className="g-4"),
+        ])
+
+    # ── Slide 7: The full picture ──
+    elif slide == 7:
+        content = html.Div([
+            _marcus_quote("Now I know when, where and why. Time to decide."),
+            _slide_title("The full picture"),
+            get_panel(
+                "Airports with highest predicted delay risk",
+                "Based on avg delay. Red >12, Amber 8–12, Green <8.",
+                [dcc.Graph(figure=build_predictive_chart(df),
+                           config={"displayModeBar": False},
+                           style={"height": "380px"})]
+            ),
+            html.Div(style={"height": "20px"}),
+            get_panel(
+                "Seasonal on-time performance — top 5 carriers",
+                "Monthly on-time % (DL · AA · UA · WN · AS) — reveals summer collapse patterns",
+                [dcc.Graph(figure=build_seasonality_chart(df),
+                           config={"displayModeBar": False},
+                           style={"height": "360px"})]
+            ),
+        ])
+
+    # ── Slide 8: Marcus decides ──
+    else:
+        content = html.Div([
+            _marcus_quote("Delta. Tuesday morning. Data confirmed."),
+            _slide_title("Marcus decides"),
+            _actions_panel(),
+        ])
+
+    return content, indicator
 
 # ── RUN ────────────────────────────────────────────────────
 
