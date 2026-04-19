@@ -1067,24 +1067,36 @@ _DOT_INACTIVE = {"width": "6px", "height": "6px", "borderRadius": "50%", "backgr
 # ── LAYOUT ─────────────────────────────────────────────────
 
 app.layout = html.Div(style={"background": C["bg"], "minHeight": "100vh", "fontFamily": "system-ui,-apple-system,sans-serif"}, children=[
-    # Topbar — filters unchanged
-    html.Div(style={"background": C["surface"], "borderBottom": f"1px solid {C['border']}", "padding": "16px 28px", "display": "flex", "alignItems": "center", "gap": "20px", "flexWrap": "wrap"}, children=[
+    # Topbar
+    html.Div(style={
+        "background": C["surface"], "borderBottom": f"1px solid {C['border']}",
+        "padding": "0 28px", "height": "64px",
+        "display": "flex", "alignItems": "center", "justifyContent": "space-between",
+    }, children=[
         html.Div([
-            html.Div("Delay Risk & Operations Dashboard", style={"fontSize": "17px", "fontWeight": "700", "color": C["text"]}),
-            html.Div("Marcus Reid's data journey — use arrows to navigate.", style={"fontSize": "12px", "color": "#7D8590", "marginTop": "2px"})
-        ], style={"flex": "1"}),
+            html.Span("✈ ", style={"fontSize": "20px", "color": "#2F81F7", "marginRight": "10px"}),
+            html.Div([
+                html.Div("Delay Risk & Operations Dashboard",
+                         style={"fontSize": "16px", "fontWeight": "700", "color": "#E6EDF3",
+                                "letterSpacing": "-0.3px", "lineHeight": "1.2"}),
+                html.Div("Marcus Reid's data journey — 6.7M flights · BTS 2023",
+                         style={"fontSize": "11px", "color": "#7D8590", "marginTop": "1px"}),
+            ]),
+        ], style={"display": "flex", "alignItems": "center"}),
         html.Div([
-            html.Div("Year", style={"fontSize": "12px", "color": "#58A6FF", "marginBottom": "4px", "fontWeight": "700", "letterSpacing": ".06em", "textTransform": "uppercase"}),
-            dcc.Dropdown(id="year-filter", options=year_options, value=str(max(DATA["clean"]["YEAR"])) if not DATA["clean"].empty else "2023", clearable=False, style={"backgroundColor": "#0D1117", "color": "#58A6FF", "border": "2px solid #388BFD", "borderRadius": "8px", "fontSize": "13px", "minWidth": "150px", "fontWeight": "600"}, className="dark-dropdown")
-        ], style={"minWidth": "150px"}),
-        html.Div([
-            html.Div("Airline", style={"fontSize": "12px", "color": "#58A6FF", "marginBottom": "4px", "fontWeight": "700", "letterSpacing": ".06em", "textTransform": "uppercase"}),
-            dcc.Dropdown(id="airline-filter", options=carrier_options, value="All", clearable=False, style={"backgroundColor": "#0D1117", "color": "#58A6FF", "border": "2px solid #388BFD", "borderRadius": "8px", "fontSize": "13px", "minWidth": "200px", "fontWeight": "600"}, className="dark-dropdown")
-        ]),
-        html.Div([
-            html.Div("Hub Airport", style={"fontSize": "12px", "color": "#58A6FF", "marginBottom": "4px", "fontWeight": "700", "letterSpacing": ".06em", "textTransform": "uppercase"}),
-            dcc.Dropdown(id="airport-filter", options=airport_options, value="All", clearable=False, style={"backgroundColor": "#0D1117", "color": "#58A6FF", "border": "2px solid #388BFD", "borderRadius": "8px", "fontSize": "13px", "minWidth": "200px", "fontWeight": "600"}, className="dark-dropdown")
-        ]),
+            html.Div([
+                html.Div("Year", style={"fontSize": "11px", "color": "#58A6FF", "marginBottom": "4px", "fontWeight": "700", "letterSpacing": ".06em", "textTransform": "uppercase"}),
+                dcc.Dropdown(id="year-filter", options=year_options, value=str(max(DATA["clean"]["YEAR"])) if not DATA["clean"].empty else "2023", clearable=False, style={"backgroundColor": "#0D1117", "color": "#58A6FF", "border": "2px solid #388BFD", "borderRadius": "8px", "fontSize": "13px", "minWidth": "130px", "fontWeight": "600"}, className="dark-dropdown")
+            ]),
+            html.Div([
+                html.Div("Airline", style={"fontSize": "11px", "color": "#58A6FF", "marginBottom": "4px", "fontWeight": "700", "letterSpacing": ".06em", "textTransform": "uppercase"}),
+                dcc.Dropdown(id="airline-filter", options=carrier_options, value="All", clearable=False, style={"backgroundColor": "#0D1117", "color": "#58A6FF", "border": "2px solid #388BFD", "borderRadius": "8px", "fontSize": "13px", "minWidth": "190px", "fontWeight": "600"}, className="dark-dropdown")
+            ]),
+            html.Div([
+                html.Div("Hub Airport", style={"fontSize": "11px", "color": "#58A6FF", "marginBottom": "4px", "fontWeight": "700", "letterSpacing": ".06em", "textTransform": "uppercase"}),
+                dcc.Dropdown(id="airport-filter", options=airport_options, value="All", clearable=False, style={"backgroundColor": "#0D1117", "color": "#58A6FF", "border": "2px solid #388BFD", "borderRadius": "8px", "fontSize": "13px", "minWidth": "190px", "fontWeight": "600"}, className="dark-dropdown")
+            ]),
+        ], style={"display": "flex", "alignItems": "center", "gap": "16px"}),
     ]),
 
     # Slide store
@@ -1191,29 +1203,61 @@ app.layout = html.Div(style={"background": C["bg"], "minHeight": "100vh", "fontF
 def slide_question(question, marcus_quote, icon=""):
     return html.Div([
         html.Div([
-            html.Span(icon + " ", style={"fontSize": "24px"}) if icon else None,
-            html.Span(question, style={"fontSize": "22px", "fontWeight": "700",
-                                       "color": "#E6EDF3", "lineHeight": "1.3"}),
-        ], style={"marginBottom": "12px"}),
+            html.Span(icon, style={"fontSize": "32px", "marginRight": "14px",
+                                   "verticalAlign": "middle"}) if icon else None,
+            html.Span(question, style={
+                "fontSize": "36px", "fontWeight": "800", "color": "#E6EDF3",
+                "letterSpacing": "-1px", "lineHeight": "1.15", "verticalAlign": "middle",
+            }),
+        ], style={"marginBottom": "14px", "display": "flex", "alignItems": "center"}),
         html.Div([
-            html.Span("Marcus: ", style={"color": "#D29922", "fontWeight": "700", "fontSize": "12px"}),
-            html.Span(f'"{marcus_quote}"', style={"color": "#D29922", "fontStyle": "italic", "fontSize": "13px"}),
-        ], style={"background": "rgba(210,153,34,0.08)", "borderLeft": "3px solid #D29922",
-                  "padding": "10px 14px", "borderRadius": "0 6px 6px 0", "display": "inline-block"}),
-    ], style={"marginBottom": "20px", "paddingBottom": "16px",
-              "borderBottom": "1px solid rgba(255,255,255,0.06)"})
+            html.Div([
+                html.Span("👤 Marcus: ", style={
+                    "color": "#D29922", "fontWeight": "700", "fontSize": "12px",
+                    "letterSpacing": "0.05em", "textTransform": "uppercase", "marginRight": "6px",
+                }),
+                html.Span(f'"{marcus_quote}"', style={
+                    "color": "#D29922", "fontStyle": "italic", "fontSize": "14px", "lineHeight": "1.5",
+                }),
+            ]),
+        ], style={
+            "background": "rgba(210,153,34,0.08)", "borderLeft": "4px solid #D29922",
+            "borderRadius": "0 8px 8px 0", "padding": "12px 18px",
+            "marginBottom": "20px", "display": "inline-block", "maxWidth": "100%",
+        }),
+        html.Hr(style={"border": "none", "borderTop": "1px solid rgba(255,255,255,0.06)", "margin": "0 0 20px"}),
+    ])
+
+
+def upsize_chart(fig, title_size=16, axis_size=12, tick_size=11):
+    new_ann = []
+    for a in fig.layout.annotations:
+        d = a.to_plotly_json()
+        f = d.get("font") or {}
+        f["size"] = max(f.get("size") or 10, 11)
+        d["font"] = f
+        new_ann.append(d)
+    fig.update_layout(
+        title=dict(font=dict(size=title_size, color="#E6EDF3")),
+        font=dict(size=tick_size),
+        xaxis=dict(title=dict(font=dict(size=axis_size)), tickfont=dict(size=tick_size)),
+        yaxis=dict(title=dict(font=dict(size=axis_size)), tickfont=dict(size=tick_size)),
+        legend=dict(font=dict(size=tick_size)),
+        annotations=new_ann if new_ann else fig.layout.annotations,
+    )
+    return fig
 
 
 def _cover_slide():
     planes_data = [
-        ("120px", "0.04", "25",   "10%", "5%",  None),
-        ("80px",  "0.06", "-15",  "60%", None,  "3%"),
-        ("200px", "0.03", "45",   "30%", "60%", None),
-        ("60px",  "0.07", "10",   "80%", "20%", None),
-        ("150px", "0.025","-30",  "5%",  None,  "15%"),
-        ("40px",  "0.08", "60",   "70%", "45%", None),
-        ("100px", "0.035","20",   "45%", "8%",  None),
-        ("70px",  "0.05", "-45",  "15%", None,  "35%"),
+        ("168px", "0.04", "25",   "10%", "5%",  None),
+        ("112px", "0.06", "-15",  "60%", None,  "3%"),
+        ("280px", "0.03", "45",   "30%", "60%", None),
+        ("84px",  "0.07", "10",   "80%", "20%", None),
+        ("210px", "0.025","-30",  "5%",  None,  "15%"),
+        ("56px",  "0.08", "60",   "70%", "45%", None),
+        ("140px", "0.035","20",   "45%", "8%",  None),
+        ("98px",  "0.05", "-45",  "15%", None,  "35%"),
     ]
     plane_elements = [
         html.Div("✈", style={
@@ -1236,18 +1280,26 @@ def _cover_slide():
     ]
     chapter_grid = html.Div([
         html.Div([
-            html.Div(f"{i+1:02d}", style={"fontSize": "9px", "color": "#2F81F7",
-                     "fontFamily": "monospace", "fontWeight": "700", "marginBottom": "4px"}),
-            html.Div(title, style={"fontSize": "11px", "color": "#E6EDF3", "fontWeight": "500"}),
-            html.Div(desc,  style={"fontSize": "10px", "color": "#7D8590", "marginTop": "2px"}),
+            html.Div(f"{i+1:02d}", style={"fontSize": "10px", "color": "#2F81F7",
+                     "fontFamily": "monospace", "fontWeight": "700", "marginBottom": "6px"}),
+            html.Div(title, style={"fontSize": "13px", "color": "#E6EDF3", "fontWeight": "500"}),
+            html.Div(desc,  style={"fontSize": "11px", "color": "#7D8590", "marginTop": "3px"}),
         ], id={"type": "menu-nav", "index": i + 1}, n_clicks=0, style={
             "background": "rgba(22,27,34,0.8)", "border": "1px solid rgba(255,255,255,0.08)",
-            "borderRadius": "8px", "padding": "12px", "cursor": "pointer", "flex": "1", "minWidth": "0",
+            "borderRadius": "8px", "padding": "16px 12px", "cursor": "pointer", "flex": "1",
+            "minWidth": "0", "minHeight": "80px", "display": "flex", "flexDirection": "column",
+            "justifyContent": "flex-start",
         })
         for i, (title, desc) in enumerate(chapter_items)
     ], style={"display": "flex", "gap": "8px", "width": "100%", "maxWidth": "1100px"})
 
     return html.Div([
+        # Radial gradient overlay
+        html.Div(style={
+            "position": "absolute", "inset": "0", "pointerEvents": "none",
+            "background": "radial-gradient(ellipse at 30% 50%, rgba(47,129,247,0.06) 0%, transparent 60%)",
+            "zIndex": "0",
+        }),
         *plane_elements,
         html.Div([
             html.Div("DATAFONOS · BIG DATA VISUALIZATION · BTS 2023", style={
@@ -1255,41 +1307,41 @@ def _cover_slide():
                 "marginBottom": "32px", "textAlign": "center",
             }),
             html.Div("Can Marcus", style={
-                "fontSize": "72px", "fontWeight": "800", "color": "#E6EDF3",
-                "lineHeight": "1", "textAlign": "center", "letterSpacing": "-2px",
+                "fontSize": "88px", "fontWeight": "800", "color": "#E6EDF3",
+                "lineHeight": "1", "textAlign": "center", "letterSpacing": "-4px",
             }),
             html.Div("Trust His Flight?", style={
-                "fontSize": "72px", "fontWeight": "800", "color": "#2F81F7",
-                "lineHeight": "1", "textAlign": "center", "letterSpacing": "-2px", "marginBottom": "24px",
+                "fontSize": "88px", "fontWeight": "800", "color": "#2F81F7",
+                "lineHeight": "1", "textAlign": "center", "letterSpacing": "-4px", "marginBottom": "28px",
             }),
             html.Div([
-                html.Span("✈ ", style={"fontSize": "16px"}),
+                html.Span("✈ ", style={"fontSize": "17px"}),
                 html.Span(
                     '"I fly 80 times a year. I\'ve missed 3 connections this quarter. Tonight I look at the data."',
                     style={"fontStyle": "italic", "color": "#D29922"},
                 ),
             ], style={
                 "background": "rgba(210,153,34,0.08)", "border": "1px solid rgba(210,153,34,0.25)",
-                "borderRadius": "12px", "padding": "16px 24px", "maxWidth": "600px",
-                "margin": "0 auto 40px", "fontSize": "15px", "textAlign": "center", "color": "#D29922",
+                "borderRadius": "12px", "padding": "20px 28px", "maxWidth": "640px",
+                "margin": "0 auto 44px", "fontSize": "17px", "textAlign": "center", "color": "#D29922",
             }),
             html.Div([
                 html.Div("256.8M hrs lost", style={
                     "background": "rgba(218,54,51,0.15)", "border": "1px solid rgba(218,54,51,0.3)",
-                    "color": "#DA3633", "padding": "10px 20px", "borderRadius": "20px",
-                    "fontSize": "13px", "fontWeight": "600",
+                    "color": "#DA3633", "padding": "14px 28px", "borderRadius": "25px",
+                    "fontSize": "15px", "fontWeight": "600",
                 }),
                 html.Div("79.4% on-time", style={
                     "background": "rgba(210,153,34,0.15)", "border": "1px solid rgba(210,153,34,0.3)",
-                    "color": "#D29922", "padding": "10px 20px", "borderRadius": "20px",
-                    "fontSize": "13px", "fontWeight": "600",
+                    "color": "#D29922", "padding": "14px 28px", "borderRadius": "25px",
+                    "fontSize": "15px", "fontWeight": "600",
                 }),
                 html.Div("6.7M flights", style={
                     "background": "rgba(47,129,247,0.15)", "border": "1px solid rgba(47,129,247,0.3)",
-                    "color": "#2F81F7", "padding": "10px 20px", "borderRadius": "20px",
-                    "fontSize": "13px", "fontWeight": "600",
+                    "color": "#2F81F7", "padding": "14px 28px", "borderRadius": "25px",
+                    "fontSize": "15px", "fontWeight": "600",
                 }),
-            ], style={"display": "flex", "gap": "12px", "justifyContent": "center", "marginBottom": "48px"}),
+            ], style={"display": "flex", "gap": "12px", "justifyContent": "center", "marginBottom": "52px"}),
             chapter_grid,
         ], style={
             "position": "relative", "zIndex": "10", "padding": "60px 40px",
@@ -1314,14 +1366,15 @@ def _slide8_content():
         html.Div(
             html.Div([
                 html.Div(num, style={"fontSize": "11px", "fontWeight": "700", "color": col,
-                                     "fontFamily": "monospace", "marginBottom": "8px"}),
-                html.Div(icon, style={"fontSize": "32px", "marginBottom": "12px"}),
-                html.Div(title, style={"fontSize": "15px", "fontWeight": "600", "color": "#E6EDF3",
-                                       "marginBottom": "8px", "lineHeight": "1.3"}),
-                html.Div(desc, style={"fontSize": "12px", "color": "#7D8590", "lineHeight": "1.5"}),
+                                     "fontFamily": "monospace", "marginBottom": "10px"}),
+                html.Div(icon, style={"fontSize": "44px", "marginBottom": "14px"}),
+                html.Div(title, style={"fontSize": "18px", "fontWeight": "700", "color": "#E6EDF3",
+                                       "marginBottom": "10px", "lineHeight": "1.3"}),
+                html.Div(desc, style={"fontSize": "13px", "color": "#7D8590", "lineHeight": "1.6"}),
             ], style={
-                "padding": "24px", "background": "#161B22", "borderRadius": "12px", "height": "100%",
-                "border": f"1px solid {col}33", "borderTop": f"4px solid {col}",
+                "padding": "28px", "background": "#161B22", "borderRadius": "12px", "height": "100%",
+                "minHeight": "180px", "border": f"1px solid {col}33", "borderTop": f"4px solid {col}",
+                "display": "flex", "flexDirection": "column",
             }),
             style={"flex": "1"}
         )
@@ -1331,14 +1384,14 @@ def _slide8_content():
         html.Div(cards, style={"display": "flex", "gap": "16px", "marginBottom": "32px"}),
         html.Div([
             html.Div('"Delta. Tuesday morning. Never Friday evening."',
-                     style={"fontSize": "32px", "fontWeight": "700", "color": "#D29922",
+                     style={"fontSize": "36px", "fontWeight": "700", "color": "#D29922",
                             "fontStyle": "italic", "textAlign": "center", "lineHeight": "1.4",
-                            "marginBottom": "12px"}),
+                            "marginBottom": "14px"}),
             html.Div("— Marcus Reid · after analysing 6.7 million real flights · BTS 2023",
                      style={"fontSize": "13px", "color": "#7D8590", "textAlign": "center"}),
         ], style={
             "background": "rgba(210,153,34,0.06)", "border": "1px solid rgba(210,153,34,0.2)",
-            "borderRadius": "12px", "padding": "32px 40px",
+            "borderRadius": "12px", "padding": "36px 40px",
         }),
     ], style={"padding": "0 0 100px"})
 
@@ -1467,8 +1520,7 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
         ]
         kpi_cards = html.Div([
             html.Div([
-                html.Div(style={"height": "5px", "borderRadius": "5px 5px 0 0",
-                                "background": color}),
+                html.Div(style={"height": "5px", "borderRadius": "5px 5px 0 0", "background": color}),
                 html.Div([
                     html.Div(label, style={"fontSize": "11px", "color": "#7D8590", "fontWeight": "600",
                                            "letterSpacing": "0.08em", "textTransform": "uppercase",
@@ -1480,7 +1532,50 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
             ], style={"flex": "1", "background": "#161B22", "borderRadius": "0 0 12px 12px",
                       "border": "1px solid rgba(255,255,255,0.06)", "borderTop": "none"})
             for label, value, color, sub in kpi_rows
-        ], style={"display": "flex", "gap": "16px", "padding": "8px 0 24px"})
+        ], style={"display": "flex", "gap": "16px", "padding": "8px 0 16px"})
+
+        context_left = html.Div([
+            html.Div("What this means for Marcus", style={
+                "fontSize": "12px", "fontWeight": "600", "color": "#7D8590",
+                "textTransform": "uppercase", "letterSpacing": "0.08em", "marginBottom": "16px",
+            }),
+            *[html.Div([
+                html.Div(stat, style={"fontSize": "32px", "fontWeight": "800", "color": col,
+                                      "letterSpacing": "-1px", "lineHeight": "1", "marginBottom": "4px"}),
+                html.Div(label, style={"fontSize": "12px", "color": "#7D8590"}),
+            ], style={"padding": "16px 0", "borderBottom": "1px solid rgba(255,255,255,0.06)"})
+            for stat, label, col in [
+                ("1 in 5", "flights arrives late by official BTS definition", "#D29922"),
+                ("67%",    "of delays are within airline control", "#DA3633"),
+                ("3×",     "higher severe delay rate on JetBlue vs Delta", "#DA3633"),
+                ("-3 min", "average delay on the best departure slot (Tue 06:00)", "#2EA043"),
+            ]],
+        ], style={"flex": "1", "padding": "24px 28px", "background": "#161B22",
+                  "borderRadius": "12px", "border": "1px solid rgba(255,255,255,0.06)"})
+
+        context_right = html.Div([
+            html.Div("Flight Reliability Index", style={
+                "fontSize": "12px", "fontWeight": "600", "color": "#7D8590",
+                "textTransform": "uppercase", "letterSpacing": "0.08em", "marginBottom": "16px",
+            }),
+            *[html.Div([
+                html.Div(airline, style={"fontSize": "13px", "color": "#E6EDF3", "marginBottom": "4px"}),
+                html.Div(style={"height": "8px", "borderRadius": "4px", "background": "#1C2230", "marginBottom": "2px"},
+                         children=[html.Div(style={"height": "100%", "width": f"{fri}%",
+                                                   "borderRadius": "4px", "background": col})]),
+                html.Div(f"FRI {fri}", style={"fontSize": "11px", "color": col, "fontWeight": "600"}),
+            ], style={"marginBottom": "12px"})
+            for airline, fri, col in [
+                ("Delta Air Lines",    84, "#2EA043"),
+                ("Alaska Airlines",   82, "#2EA043"),
+                ("United Airlines",   76, "#D29922"),
+                ("Southwest Airlines",76, "#D29922"),
+                ("JetBlue Airways",   54, "#DA3633"),
+                ("Frontier Airlines", 41, "#DA3633"),
+            ]],
+        ], style={"flex": "1", "padding": "24px 28px", "background": "#161B22",
+                  "borderRadius": "12px", "border": "1px solid rgba(255,255,255,0.06)",
+                  "marginLeft": "16px"})
 
         content = html.Div([
             slide_question(
@@ -1496,9 +1591,12 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                 html.Div("passenger-hours lost to delays in 2023",
                          style={"fontSize": "18px", "color": "#7D8590",
                                 "textAlign": "center", "marginTop": "4px"}),
-            ], style={"padding": "32px 0 28px", "borderBottom": "1px solid rgba(255,255,255,0.06)"}),
+            ], style={"padding": "28px 0 20px", "borderBottom": "1px solid rgba(255,255,255,0.06)"}),
             kpi_cards,
             marcus_alert(df, selected_airline, selected_airport),
+            html.Div(style={"height": "16px"}),
+            html.Div([context_left, context_right],
+                     style={"display": "flex", "flex": "1", "paddingBottom": "100px"}),
         ])
 
     # ── Slide 2: Where it breaks ──
@@ -1509,25 +1607,60 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
             get_panel(
                 "Where delays occur — airport congestion",
                 "Bubble size = flight volume • Color = avg delay",
-                [dcc.Graph(figure=build_airport_map(df, selected_airport),
+                [dcc.Graph(figure=upsize_chart(build_airport_map(df, selected_airport)),
                            config={"displayModeBar": False}, style={"height": "580px"})]
             ),
         ])
 
     # ── Slide 3: Why it breaks ──
     elif slide == 3:
+        donut_fig = upsize_chart(build_donut(df))
         content = html.Div([
             slide_question("Whose fault are the delays?",
                            "67% is the airline's fault. I can actually fix this.", "🔍"),
-            html.Div(
-                get_panel(
-                    "Why delays occur — cause breakdown",
-                    "Share of total delay minutes per category",
-                    [dcc.Graph(figure=build_donut(df),
-                               config={"displayModeBar": False}, style={"height": "560px"})]
-                ),
-                style={"maxWidth": "820px", "margin": "0 auto"}
-            ),
+            html.Div([
+                html.Div([
+                    dcc.Graph(figure=donut_fig, config={"displayModeBar": False},
+                              style={"height": "560px"}),
+                ], style={"flex": "6"}),
+                html.Div([
+                    html.Div("Delay cause breakdown", style={
+                        "fontSize": "13px", "fontWeight": "600", "color": "#7D8590",
+                        "textTransform": "uppercase", "letterSpacing": "0.08em", "marginBottom": "20px",
+                    }),
+                    *[html.Div([
+                        html.Div(style={
+                            "width": "12px", "height": "12px", "borderRadius": "2px",
+                            "background": col, "flexShrink": "0", "marginTop": "3px",
+                        }),
+                        html.Div([
+                            html.Div(label, style={"fontSize": "14px", "color": "#E6EDF3",
+                                                   "fontWeight": "500", "marginBottom": "2px"}),
+                            html.Div(pct, style={"fontSize": "28px", "fontWeight": "800",
+                                                 "color": col, "letterSpacing": "-1px", "lineHeight": "1"}),
+                            html.Div(desc, style={"fontSize": "11px", "color": "#7D8590", "marginTop": "2px"}),
+                        ]),
+                    ], style={"display": "flex", "gap": "12px", "padding": "14px 0",
+                              "borderBottom": "1px solid rgba(255,255,255,0.06)"})
+                    for col, label, pct, desc in [
+                        ("#DA3633", "Late Aircraft",      "40%", "Controllable by airline"),
+                        ("#D29922", "Airline Operations", "27%", "Controllable by airline"),
+                        ("#2F81F7", "NAS / Air Traffic",  "22%", "External factor"),
+                        ("#79c0ff", "Weather",            "11%", "External factor"),
+                        ("#7D8590", "Security",            "2%", "External factor"),
+                    ]],
+                    html.Div([
+                        html.Div("67%", style={"fontSize": "48px", "fontWeight": "800",
+                                               "color": "#DA3633", "letterSpacing": "-2px", "lineHeight": "1"}),
+                        html.Div("of delays are the airline's fault",
+                                 style={"fontSize": "13px", "color": "#7D8590", "marginTop": "4px"}),
+                    ], style={
+                        "background": "rgba(218,54,51,0.08)", "border": "1px solid rgba(218,54,51,0.2)",
+                        "borderRadius": "10px", "padding": "20px", "marginTop": "20px", "textAlign": "center",
+                    }),
+                ], style={"flex": "4", "padding": "0 0 0 32px", "display": "flex",
+                          "flexDirection": "column", "justifyContent": "center"}),
+            ], style={"display": "flex", "alignItems": "stretch", "height": "calc(100vh - 240px)"}),
         ])
 
     # ── Slide 4: When it breaks ──
@@ -1538,7 +1671,7 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
             get_panel(
                 "When delays peak — day × hour heatmap",
                 "Avg. arrival delay by day/hour",
-                [dcc.Graph(figure=build_heatmap(df),
+                [dcc.Graph(figure=upsize_chart(build_heatmap(df)),
                            config={"displayModeBar": False}, style={"height": "520px"})]
             ),
         ])
@@ -1551,7 +1684,7 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
             get_panel(
                 "Carrier reliability — Flight Reliability Index (FRI)",
                 "50% on-time + 30% low delay + 20% low cancel",
-                [dcc.Graph(figure=build_fri_chart(df, selected_airline),
+                [dcc.Graph(figure=upsize_chart(build_fri_chart(df, selected_airline)),
                            config={"displayModeBar": False}, style={"height": "580px"})]
             ),
             html.Div(fri_rec, style={"marginTop": "10px", "paddingLeft": "4px"}),
@@ -1567,7 +1700,7 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                     get_panel(
                         "Delay propagation — dep vs arr delay",
                         "Sample of 50 k flights • Color = airline • Dashed = regression",
-                        [dcc.Graph(figure=build_scatter_propagation(df),
+                        [dcc.Graph(figure=upsize_chart(build_scatter_propagation(df)),
                                    config={"displayModeBar": False}, style={"height": "480px"})]
                     ),
                     md=7, style={"marginBottom": "16px"}
@@ -1576,7 +1709,7 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                     get_panel(
                         "Severe delay rate by carrier (ARR_DELAY > 60 min)",
                         "Green <3 % · Amber 3–6 % · Red >6 %",
-                        [dcc.Graph(figure=build_severe_delay_chart(df),
+                        [dcc.Graph(figure=upsize_chart(build_severe_delay_chart(df)),
                                    config={"displayModeBar": False}, style={"height": "480px"})]
                     ),
                     md=5, style={"marginBottom": "16px"}
@@ -1592,14 +1725,14 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
             get_panel(
                 "Airports with highest predicted delay risk",
                 "Based on avg delay. Red >12, Amber 8–12, Green <8.",
-                [dcc.Graph(figure=build_predictive_chart(df),
+                [dcc.Graph(figure=upsize_chart(build_predictive_chart(df)),
                            config={"displayModeBar": False}, style={"height": "420px"})]
             ),
             html.Div(style={"height": "20px"}),
             get_panel(
                 "Seasonal on-time performance — top 5 carriers",
                 "Monthly on-time % (DL · AA · UA · WN · AS) — reveals summer collapse patterns",
-                [dcc.Graph(figure=build_seasonality_chart(df),
+                [dcc.Graph(figure=upsize_chart(build_seasonality_chart(df)),
                            config={"displayModeBar": False}, style={"height": "400px"})]
             ),
         ])
