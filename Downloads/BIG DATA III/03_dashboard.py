@@ -28,7 +28,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import dash
-from dash import dcc, html, Input, Output, State
+from dash import dcc, html, Input, Output, State, ALL
 import dash_bootstrap_components as dbc
 
 DATA_DIR = Path("data")
@@ -1025,6 +1025,7 @@ dd_style = {"background": C["surface"], "color": C["text"], "border": f"1px soli
 # ── SLIDE TITLES ───────────────────────────────────────────
 
 SLIDE_TITLES = {
+    0: "Cover",
     1: "01 — The System",
     2: "02 — Where it breaks",
     3: "03 — Why it breaks",
@@ -1035,6 +1036,22 @@ SLIDE_TITLES = {
     8: "08 — Marcus decides",
 }
 TOTAL_SLIDES = 8
+
+MENU_ITEMS = [
+    (1, "The System",        "KPIs and the scale of the problem"),
+    (2, "Where it breaks",   "Airport congestion map"),
+    (3, "Why it breaks",     "Delay cause breakdown"),
+    (4, "When it breaks",    "Hour × weekday heatmap"),
+    (5, "Who to trust",      "Flight Reliability Index ranking"),
+    (6, "The domino effect", "Propagation and severe delays"),
+    (7, "The full picture",  "Predictive risk and seasonality"),
+    (8, "Marcus decides",    "Recommended actions"),
+]
+
+_DOT_ACTIVE   = {"width": "8px", "height": "8px", "borderRadius": "50%", "background": "#2F81F7",
+                 "border": "none", "cursor": "pointer", "padding": "0", "transition": "all 0.2s", "flexShrink": "0"}
+_DOT_INACTIVE = {"width": "6px", "height": "6px", "borderRadius": "50%", "background": "rgba(255,255,255,0.15)",
+                 "border": "none", "cursor": "pointer", "padding": "0", "transition": "all 0.2s", "flexShrink": "0"}
 
 # ── LAYOUT ─────────────────────────────────────────────────
 
@@ -1059,103 +1076,102 @@ app.layout = html.Div(style={"background": C["bg"], "minHeight": "100vh", "fontF
         ]),
     ]),
 
-    # Slide store
-    dcc.Store(id="current-slide", data=1),
+    # Stores
+    dcc.Store(id="current-slide", data=0),
+    dcc.Store(id="keyboard-listener", data=""),
 
     # Slide content area
     html.Div(id="slide-content", style={
-        "padding": "32px 40px 100px 40px",
+        "padding": "32px 40px 120px 40px",
         "overflowY": "auto",
         "height": "calc(100vh - 80px)",
     }),
 
-    # Fixed bottom navigation bar
+    # Progress dots (static — styles updated per slide by callback)
     html.Div([
-        html.Button("← Previous", id="btn-prev", n_clicks=0, style={
-            "background": "transparent",
-            "border": f"1px solid {C['border']}",
-            "color": C["text"],
-            "padding": "8px 22px",
-            "borderRadius": "6px",
-            "fontSize": "13px",
-            "fontWeight": "600",
-            "cursor": "pointer",
-            "fontFamily": "system-ui,-apple-system,sans-serif",
-        }),
-        html.Div(id="slide-indicator", style={
-            "color": C["muted"],
-            "fontSize": "13px",
-            "fontWeight": "500",
-            "minWidth": "260px",
-            "textAlign": "center",
-            "letterSpacing": ".02em",
-        }),
-        html.Button("Next →", id="btn-next", n_clicks=0, style={
-            "background": C["blue"],
-            "border": "none",
-            "color": "#fff",
-            "padding": "8px 22px",
-            "borderRadius": "6px",
-            "fontSize": "13px",
-            "fontWeight": "600",
-            "cursor": "pointer",
-            "fontFamily": "system-ui,-apple-system,sans-serif",
-        }),
+        html.Button(style=_DOT_ACTIVE if i == 0 else _DOT_INACTIVE, id=f"dot-{i}", n_clicks=0)
+        for i in range(9)
     ], style={
         "position": "fixed",
-        "bottom": "0",
+        "bottom": "54px",
         "left": "0",
         "right": "0",
         "display": "flex",
         "justifyContent": "center",
         "alignItems": "center",
-        "gap": "20px",
-        "padding": "14px",
+        "gap": "8px",
+        "zIndex": "999",
+    }),
+
+    # Fixed bottom navigation bar
+    html.Div([
+        html.Div(id="slide-counter", style={"fontSize": "11px", "color": "#7D8590", "minWidth": "60px"}),
+        html.Div([
+            html.Button("← Prev", id="btn-prev", n_clicks=0, style={
+                "background": "transparent", "color": "#7D8590",
+                "border": "1px solid rgba(255,255,255,0.12)",
+                "borderRadius": "6px", "padding": "8px 20px",
+                "fontSize": "12px", "cursor": "pointer",
+                "fontFamily": "system-ui,-apple-system,sans-serif",
+            }),
+            html.Div(id="slide-indicator", style={
+                "fontSize": "13px", "color": "#E6EDF3", "fontWeight": "500",
+                "minWidth": "220px", "textAlign": "center",
+            }),
+            html.Button("Next →", id="btn-next", n_clicks=0, style={
+                "background": "#2F81F7", "color": "white", "border": "none",
+                "borderRadius": "6px", "padding": "8px 20px",
+                "fontSize": "12px", "cursor": "pointer", "fontWeight": "600",
+                "fontFamily": "system-ui,-apple-system,sans-serif",
+            }),
+        ], style={"display": "flex", "alignItems": "center", "gap": "16px"}),
+        html.Button("⌂ Menu", id="btn-home", n_clicks=0, style={
+            "background": "transparent", "color": "#7D8590",
+            "border": "1px solid rgba(255,255,255,0.12)",
+            "borderRadius": "6px", "padding": "8px 16px",
+            "fontSize": "12px", "cursor": "pointer", "minWidth": "70px",
+            "fontFamily": "system-ui,-apple-system,sans-serif",
+        }),
+    ], style={
+        "position": "fixed", "bottom": "0", "left": "0", "right": "0",
+        "display": "flex", "justifyContent": "space-between", "alignItems": "center",
+        "padding": "12px 28px",
         "background": "rgba(13,17,23,0.97)",
-        "borderTop": f"1px solid {C['border']}",
+        "borderTop": "1px solid rgba(255,255,255,0.08)",
         "zIndex": "1000",
+        "backdropFilter": "blur(8px)",
     }),
 ])
 
-# ── CALLBACKS ──────────────────────────────────────────────
-
-@app.callback(
-    Output("current-slide", "data"),
-    Output("slide-indicator", "children"),
-    Input("btn-prev", "n_clicks"),
-    Input("btn-next", "n_clicks"),
-    State("current-slide", "data"),
-    prevent_initial_call=True,
-)
-def navigate(prev, next_, current):
-    ctx = dash.callback_context
-    btn = ctx.triggered[0]["prop_id"]
-    new = min(current + 1, TOTAL_SLIDES) if "next" in btn else max(current - 1, 1)
-    return new, f"{SLIDE_TITLES[new]}  ·  {new} / {TOTAL_SLIDES}"
-
+# ── HELPER COMPONENTS ──────────────────────────────────────
 
 def _marcus_quote(text):
     return html.Div(
         f'Marcus: "{text}"',
         style={
-            "fontSize": "13px",
+            "fontSize": "14px",
             "fontStyle": "italic",
             "color": C["amber"],
             "borderLeft": "3px solid #D29922",
-            "paddingLeft": "12px",
-            "marginBottom": "20px",
-            "lineHeight": "1.6",
+            "paddingLeft": "14px",
+            "paddingTop": "4px",
+            "paddingBottom": "4px",
+            "marginBottom": "22px",
+            "lineHeight": "1.7",
         }
     )
 
 
 def _slide_title(text):
     return html.Div(text, style={
-        "fontSize": "22px",
+        "fontSize": "26px",
         "fontWeight": "700",
         "color": C["text"],
-        "marginBottom": "16px",
+        "borderLeft": "4px solid #2F81F7",
+        "paddingLeft": "14px",
+        "marginBottom": "20px",
         "letterSpacing": "-.01em",
+        "lineHeight": "1.2",
     })
 
 
@@ -1169,25 +1185,39 @@ def _actions_panel():
     cards = []
     for num, color, text in actions:
         cards.append(html.Div([
-            html.Div(num, style={"fontSize": "11px", "fontWeight": "700", "color": color,
-                                 "fontFamily": "monospace", "marginBottom": "6px"}),
-            html.Div(text, style={"fontSize": "14px", "color": C["muted"], "lineHeight": "1.5"}),
+            html.Div(num, style={"fontSize": "13px", "fontWeight": "700", "color": color,
+                                 "fontFamily": "monospace", "marginBottom": "10px"}),
+            html.Div(text, style={"fontSize": "15px", "color": C["muted"], "lineHeight": "1.6"}),
         ], style={
             "flex": "1",
-            "padding": "20px 22px",
+            "padding": "24px 26px",
+            "minHeight": "140px",
             "background": C["surface2"],
             "borderRadius": "10px",
             "borderLeft": f"4px solid {color}",
             "minWidth": "200px",
+            "display": "flex",
+            "flexDirection": "column",
+            "justifyContent": "flex-start",
         }))
     return html.Div([
-        html.Div("Recommended actions", style={"fontSize": "16px", "fontWeight": "600",
-                                               "color": C["text"], "marginBottom": "20px"}),
+        html.Div("Recommended actions", style={"fontSize": "18px", "fontWeight": "600",
+                                               "color": C["text"], "marginBottom": "22px"}),
         html.Div(cards, style={"display": "flex", "gap": "16px", "flexWrap": "wrap"}),
+        html.Div([
+            html.Div('"Delta. Tuesday morning. Data confirmed."',
+                     style={"fontSize": "28px", "fontWeight": "700", "color": "#D29922",
+                            "fontStyle": "italic", "textAlign": "center", "lineHeight": "1.4"}),
+            html.Div("— Marcus Reid · after analysing 6.7 million flights",
+                     style={"fontSize": "13px", "color": "#7D8590", "textAlign": "center",
+                            "marginTop": "12px"}),
+        ], style={"padding": "40px 20px",
+                  "borderTop": "1px solid rgba(255,255,255,0.08)",
+                  "marginTop": "30px"}),
         html.Div(
             "Recommendation: Airlines should prioritize aircraft rotation efficiency and staff planning "
             "at high-risk hubs during peak hours to reduce systemic delays.",
-            style={"marginTop": "28px", "padding": "16px 20px", "background": C["surface"],
+            style={"padding": "16px 20px", "background": C["surface"],
                    "border": f"1px solid {C['border']}", "borderRadius": "12px",
                    "color": C["muted"], "fontSize": "13px", "lineHeight": "1.6"}
         ),
@@ -1195,16 +1225,187 @@ def _actions_panel():
               "borderRadius": "12px", "padding": "28px 32px"})
 
 
+def _cover_slide():
+    planes = [
+        {"top": "8%",  "left": "5%",   "size": "28px", "opacity": "0.06", "rotate": "45deg"},
+        {"top": "15%", "right": "8%",  "size": "60px", "opacity": "0.04", "rotate": "20deg"},
+        {"top": "45%", "left": "2%",   "size": "18px", "opacity": "0.08", "rotate": "60deg"},
+        {"top": "70%", "right": "5%",  "size": "40px", "opacity": "0.05", "rotate": "-20deg"},
+        {"top": "85%", "left": "15%",  "size": "22px", "opacity": "0.07", "rotate": "30deg"},
+        {"top": "30%", "right": "20%", "size": "80px", "opacity": "0.03", "rotate": "-10deg"},
+        {"top": "60%", "left": "40%",  "size": "16px", "opacity": "0.09", "rotate": "75deg"},
+        {"top": "20%", "left": "35%",  "size": "50px", "opacity": "0.04", "rotate": "15deg"},
+    ]
+    plane_elements = [
+        html.Div("✈", style={
+            "position": "absolute",
+            "top": p["top"],
+            "left": p.get("left", "auto"),
+            "right": p.get("right", "auto"),
+            "fontSize": p["size"],
+            "opacity": p["opacity"],
+            "color": "#2F81F7",
+            "transform": f"rotate({p['rotate']})",
+            "pointerEvents": "none",
+            "userSelect": "none",
+        }) for p in planes
+    ]
+
+    stat_pills = html.Div([
+        html.Span("256.8M hrs lost", style={
+            "background": "rgba(218,54,51,0.18)", "color": "#FF7B72",
+            "border": "1px solid rgba(218,54,51,0.4)",
+            "padding": "6px 16px", "borderRadius": "20px",
+            "fontSize": "13px", "fontWeight": "600",
+        }),
+        html.Span("79.4% on-time", style={
+            "background": "rgba(210,153,34,0.15)", "color": "#D29922",
+            "border": "1px solid rgba(210,153,34,0.4)",
+            "padding": "6px 16px", "borderRadius": "20px",
+            "fontSize": "13px", "fontWeight": "600",
+        }),
+        html.Span("6.7M flights", style={
+            "background": "rgba(47,129,247,0.15)", "color": "#58A6FF",
+            "border": "1px solid rgba(47,129,247,0.4)",
+            "padding": "6px 16px", "borderRadius": "20px",
+            "fontSize": "13px", "fontWeight": "600",
+        }),
+    ], style={"display": "flex", "gap": "10px", "flexWrap": "wrap"})
+
+    menu_cards = []
+    for idx, title, desc in MENU_ITEMS:
+        menu_cards.append(
+            html.Button([
+                html.Div([
+                    html.Span(f"{idx:02d}", style={
+                        "fontSize": "11px", "fontWeight": "700", "color": "#58A6FF",
+                        "fontFamily": "monospace", "marginRight": "10px",
+                    }),
+                    html.Span(title, style={
+                        "fontSize": "14px", "fontWeight": "600", "color": "#E6EDF3",
+                    }),
+                ], style={"display": "flex", "alignItems": "center", "marginBottom": "4px"}),
+                html.Div(desc, style={"fontSize": "12px", "color": "#7D8590", "paddingLeft": "26px"}),
+            ], id={"type": "menu-nav", "index": idx}, n_clicks=0, style={
+                "background": "rgba(22,27,34,0.8)",
+                "border": "1px solid rgba(48,54,61,0.8)",
+                "borderRadius": "8px",
+                "padding": "12px 16px",
+                "cursor": "pointer",
+                "width": "100%",
+                "textAlign": "left",
+                "marginBottom": "8px",
+                "fontFamily": "system-ui,-apple-system,sans-serif",
+            })
+        )
+
+    left_side = html.Div([
+        html.Div("DATAFONOS · BIG DATA VISUALIZATION · 2025", style={
+            "fontSize": "10px", "color": "#7D8590", "letterSpacing": "2px",
+            "textTransform": "uppercase", "marginBottom": "24px",
+        }),
+        html.Div("Can Marcus", style={
+            "fontSize": "56px", "fontWeight": "700", "color": "#E6EDF3",
+            "lineHeight": "1.1", "letterSpacing": "-2px",
+        }),
+        html.Div("Trust His Flight?", style={
+            "fontSize": "56px", "fontWeight": "700", "color": "#2F81F7",
+            "lineHeight": "1.1", "letterSpacing": "-2px", "marginBottom": "18px",
+        }),
+        html.Div("US Airline On-Time Performance · BTS 2023 · 6.7M flights analysed", style={
+            "fontSize": "14px", "color": "#7D8590", "marginBottom": "32px",
+        }),
+        stat_pills,
+        html.Div(style={"height": "36px"}),
+        html.Div([
+            html.Div("👨‍💼", style={"fontSize": "52px", "marginBottom": "10px"}),
+            html.Div('"I\'m done guessing. Tonight I look at the data."', style={
+                "fontSize": "14px", "fontStyle": "italic", "color": "#D29922",
+                "borderLeft": "3px solid #D29922", "paddingLeft": "12px",
+                "lineHeight": "1.6",
+            }),
+        ]),
+    ], style={"width": "58%", "paddingRight": "60px"})
+
+    right_side = html.Div([
+        html.Div("Choose a chapter", style={
+            "fontSize": "12px", "color": "#7D8590", "letterSpacing": "1px",
+            "textTransform": "uppercase", "marginBottom": "16px", "fontWeight": "600",
+        }),
+        html.Div(menu_cards),
+    ], style={"width": "42%"})
+
+    return html.Div([
+        *plane_elements,
+        html.Div([left_side, right_side], style={
+            "display": "flex",
+            "alignItems": "center",
+            "minHeight": "calc(100vh - 200px)",
+            "position": "relative",
+            "zIndex": "1",
+        }),
+        html.Div("Press Next → or select a chapter to begin", style={
+            "textAlign": "center", "color": "#7D8590", "fontSize": "11px",
+            "marginTop": "20px", "letterSpacing": "0.5px",
+        }),
+    ], style={"position": "relative", "minHeight": "calc(100vh - 200px)"})
+
+
+# ── CALLBACKS ──────────────────────────────────────────────
+
+@app.callback(
+    Output("current-slide", "data"),
+    [Input("btn-prev", "n_clicks"),
+     Input("btn-next", "n_clicks"),
+     Input("btn-home", "n_clicks"),
+     Input({"type": "menu-nav", "index": ALL}, "n_clicks")] +
+    [Input(f"dot-{i}", "n_clicks") for i in range(9)],
+    State("current-slide", "data"),
+    prevent_initial_call=True,
+)
+def navigate(*args):
+    import json
+    current = args[-1]
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return current
+    prop = ctx.triggered[0]["prop_id"]
+    if "btn-next" in prop:
+        return min(current + 1, TOTAL_SLIDES)
+    if "btn-prev" in prop:
+        return max(current - 1, 0)
+    if "btn-home" in prop:
+        return 0
+    if prop.startswith("{"):
+        id_dict = json.loads(prop.rsplit(".", 1)[0])
+        return id_dict["index"]
+    if "dot-" in prop:
+        return int(prop.split(".")[0].split("-")[1])
+    return current
+
+
+@app.callback(
+    [Output(f"dot-{i}", "style") for i in range(9)],
+    Input("current-slide", "data"),
+)
+def update_dots(slide):
+    return [_DOT_ACTIVE if i == slide else _DOT_INACTIVE for i in range(9)]
+
+
 @app.callback(
     Output("slide-content", "children"),
-    Output("slide-indicator", "children", allow_duplicate=True),
+    Output("slide-indicator", "children"),
+    Output("slide-counter", "children"),
     Input("current-slide", "data"),
     Input("year-filter", "value"),
     Input("airline-filter", "value"),
     Input("airport-filter", "value"),
-    prevent_initial_call="initial_duplicate",
 )
 def render_slide(slide, selected_year, selected_airline, selected_airport):
+    # Cover — no data needed
+    if slide == 0:
+        return _cover_slide(), "", ""
+
     # ── filter df ──
     df = DATA["clean"].copy()
     if selected_year and selected_year != "All":
@@ -1240,15 +1441,25 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
     except Exception:
         fri_rec = ""
 
-    indicator = f"{SLIDE_TITLES[slide]}  ·  {slide} / {TOTAL_SLIDES}"
+    indicator = SLIDE_TITLES[slide]
+    counter = f"{slide} / {TOTAL_SLIDES}"
 
     # ── Slide 1: The System ──
     if slide == 1:
         content = html.Div([
             _marcus_quote("I had no idea the system was this broken."),
             _slide_title("The System"),
-            html.Div(id="kpi-strip-s1", children=build_kpi_strip(metrics), style={"marginBottom": "24px"}),
-            html.Div(id="marcus-alert-s1", children=marcus_alert(df, selected_airline, selected_airport)),
+            build_kpi_strip(metrics),
+            html.Div(style={"height": "24px"}),
+            marcus_alert(df, selected_airline, selected_airport),
+            html.Div([
+                html.Div("256.8M", style={
+                    "fontSize": "96px", "fontWeight": "700", "color": "#DA3633",
+                    "letterSpacing": "-4px", "lineHeight": "1",
+                }),
+                html.Div("passenger-hours lost to delays in 2023",
+                         style={"fontSize": "16px", "color": "#7D8590", "marginTop": "8px"}),
+            ], style={"textAlign": "center", "padding": "40px 0"}),
         ])
 
     # ── Slide 2: Where it breaks ──
@@ -1261,7 +1472,7 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                 "Bubble size = flight volume • Color = avg delay",
                 [dcc.Graph(figure=build_airport_map(df, selected_airport),
                            config={"displayModeBar": False},
-                           style={"height": "520px"})]
+                           style={"height": "620px"})]
             ),
         ])
 
@@ -1276,9 +1487,9 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                     "Share of total delay minutes per category",
                     [dcc.Graph(figure=build_donut(df),
                                config={"displayModeBar": False},
-                               style={"height": "480px"})]
+                               style={"height": "580px"})]
                 ),
-                style={"maxWidth": "800px", "margin": "0 auto"}
+                style={"maxWidth": "820px", "margin": "0 auto"}
             ),
         ])
 
@@ -1292,7 +1503,7 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                 "Avg. arrival delay by day/hour",
                 [dcc.Graph(figure=build_heatmap(df),
                            config={"displayModeBar": False},
-                           style={"height": "460px"})]
+                           style={"height": "580px"})]
             ),
         ])
 
@@ -1306,7 +1517,7 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                 "50% on-time + 30% low delay + 20% low cancel",
                 [dcc.Graph(figure=build_fri_chart(df, selected_airline),
                            config={"displayModeBar": False},
-                           style={"height": "520px"})]
+                           style={"height": "600px"})]
             ),
             html.Div(fri_rec, style={"marginTop": "10px", "paddingLeft": "4px"}),
         ])
@@ -1323,7 +1534,7 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                         "Sample of 50 k flights • Color = airline • Dashed = regression",
                         [dcc.Graph(figure=build_scatter_propagation(df),
                                    config={"displayModeBar": False},
-                                   style={"height": "440px"})]
+                                   style={"height": "560px"})]
                     ),
                     md=7, style={"marginBottom": "16px"}
                 ),
@@ -1333,7 +1544,7 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                         "Green <3 % · Amber 3–6 % · Red >6 %",
                         [dcc.Graph(figure=build_severe_delay_chart(df),
                                    config={"displayModeBar": False},
-                                   style={"height": "440px"})]
+                                   style={"height": "560px"})]
                     ),
                     md=5, style={"marginBottom": "16px"}
                 ),
@@ -1350,7 +1561,7 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                 "Based on avg delay. Red >12, Amber 8–12, Green <8.",
                 [dcc.Graph(figure=build_predictive_chart(df),
                            config={"displayModeBar": False},
-                           style={"height": "380px"})]
+                           style={"height": "440px"})]
             ),
             html.Div(style={"height": "20px"}),
             get_panel(
@@ -1358,7 +1569,7 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                 "Monthly on-time % (DL · AA · UA · WN · AS) — reveals summer collapse patterns",
                 [dcc.Graph(figure=build_seasonality_chart(df),
                            config={"displayModeBar": False},
-                           style={"height": "360px"})]
+                           style={"height": "400px"})]
             ),
         ])
 
@@ -1370,7 +1581,32 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
             _actions_panel(),
         ])
 
-    return content, indicator
+    return content, indicator, counter
+
+
+# ── KEYBOARD NAVIGATION (clientside) ──────────────────────
+
+app.clientside_callback(
+    """
+    function(n) {
+        if (!window._kbNavSetup) {
+            window._kbNavSetup = true;
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'ArrowRight') {
+                    var btn = document.getElementById('btn-next');
+                    if (btn) btn.click();
+                } else if (e.key === 'ArrowLeft') {
+                    var btn = document.getElementById('btn-prev');
+                    if (btn) btn.click();
+                }
+            });
+        }
+        return n;
+    }
+    """,
+    Output("keyboard-listener", "data"),
+    Input("keyboard-listener", "data"),
+)
 
 # ── RUN ────────────────────────────────────────────────────
 
