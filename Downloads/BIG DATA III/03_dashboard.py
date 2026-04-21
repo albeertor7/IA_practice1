@@ -975,7 +975,7 @@ def build_seasonality_chart(df):
 
 # ── APP SETUP ──────────────────────────────────────────────
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY], suppress_callback_exceptions=True)
 
 app.index_string = '''
 <!DOCTYPE html>
