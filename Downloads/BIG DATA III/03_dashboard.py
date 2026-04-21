@@ -1438,10 +1438,10 @@ def _slide8_content():
     [Input("btn-prev", "n_clicks"),
      Input("btn-next", "n_clicks"),
      Input("btn-home", "n_clicks"),
-     Input({"type": "menu-nav", "index": ALL}, "n_clicks")] +
+     Input({"type": "menu-nav", "index": ALL}, "n_clicks"),
+     Input({"type": "journey-nav", "index": ALL}, "n_clicks")] +
     [Input(f"dot-{i}", "n_clicks") for i in range(9)] +
-    [Input(f"panel-slide-{i}", "n_clicks") for i in range(1, 9)] +
-    [Input(f"journey-slide-{i}", "n_clicks") for i in range(1, 9)],
+    [Input(f"panel-slide-{i}", "n_clicks") for i in range(1, 9)],
     State("current-slide", "data"),
     prevent_initial_call=True,
 )
@@ -1464,8 +1464,6 @@ def navigate(*args):
     if "dot-" in prop:
         return int(prop.split(".")[0].split("-")[1])
     if "panel-slide-" in prop:
-        return int(prop.split(".")[0].split("-")[2])
-    if "journey-slide-" in prop:
         return int(prop.split(".")[0].split("-")[2])
     return current
 
@@ -1627,7 +1625,7 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                              "fontFamily": "monospace", "fontWeight": "700", "marginBottom": "4px"}),
                     html.Div(title, style={"fontSize": "11px", "color": "#E6EDF3",
                              "fontWeight": "500", "textAlign": "center", "lineHeight": "1.3"}),
-                ], id=f"journey-slide-{i+1}", n_clicks=0, style={
+                ], id={"type": "journey-nav", "index": i+1}, n_clicks=0, style={
                     "display": "flex", "flexDirection": "column", "alignItems": "center",
                     "padding": "14px 8px", "background": "rgba(22,27,34,0.8)",
                     "border": "1px solid rgba(255,255,255,0.06)", "borderRadius": "10px",
