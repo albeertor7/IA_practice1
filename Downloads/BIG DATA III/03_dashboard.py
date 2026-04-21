@@ -1216,13 +1216,27 @@ def slide_question(parts, marcus_quote, icon=""):
         html.Div(title_spans, style={"marginBottom": "14px", "display": "flex",
                                      "alignItems": "center", "flexWrap": "wrap"}),
         html.Div([
-            html.Span("👤 MARCUS:  ", style={"color": "#D29922", "fontWeight": "700",
-                                              "fontSize": "11px", "letterSpacing": "0.08em"}),
-            html.Span(f'"{marcus_quote}"', style={"color": "#D29922", "fontStyle": "italic",
-                                                   "fontSize": "14px", "lineHeight": "1.5"}),
-        ], style={"background": "rgba(210,153,34,0.08)", "borderLeft": "4px solid #D29922",
-                  "borderRadius": "0 8px 8px 0", "padding": "12px 18px", "marginBottom": "20px",
-                  "display": "inline-block", "maxWidth": "100%"}),
+            html.Div([
+                html.Div("👤", style={
+                    "width": "36px", "height": "36px", "borderRadius": "50%",
+                    "background": "rgba(210,153,34,0.15)", "border": "1px solid rgba(210,153,34,0.3)",
+                    "display": "flex", "alignItems": "center", "justifyContent": "center",
+                    "fontSize": "18px", "flexShrink": "0", "marginRight": "14px",
+                }),
+                html.Div([
+                    html.Div("Marcus Reid  ·  Business Consultant  ·  Chicago, IL",
+                             style={"fontSize": "10px", "color": "#7D8590", "fontWeight": "600",
+                                    "letterSpacing": "0.06em", "textTransform": "uppercase",
+                                    "marginBottom": "5px"}),
+                    html.Div(f'"{marcus_quote}"',
+                             style={"fontSize": "15px", "color": "#D29922", "fontStyle": "italic",
+                                    "lineHeight": "1.5", "fontWeight": "500"}),
+                ]),
+            ], style={"display": "flex", "alignItems": "center"}),
+        ], style={
+            "background": "rgba(210,153,34,0.06)", "border": "1px solid rgba(210,153,34,0.15)",
+            "borderRadius": "10px", "padding": "14px 18px", "marginBottom": "20px",
+        }),
         html.Hr(style={"border": "none", "borderTop": "1px solid rgba(255,255,255,0.06)",
                        "margin": "0 0 20px"}),
     ])
@@ -1513,18 +1527,26 @@ def update_ticker_s1(n):
     value, label, color = stats[idx]
     return html.Div([
         html.Div(value, style={
-            "fontSize": "60px", "fontWeight": "800", "color": color,
-            "letterSpacing": "-2px", "lineHeight": "1", "marginBottom": "8px",
+            "fontSize": "88px", "fontWeight": "800", "color": color,
+            "letterSpacing": "-3px", "lineHeight": "1", "marginBottom": "10px",
+            "textAlign": "center",
         }),
-        html.Div(label, style={"fontSize": "14px", "color": "#7D8590", "marginBottom": "24px"}),
+        html.Div(label, style={
+            "fontSize": "15px", "color": "#7D8590", "marginBottom": "28px",
+            "textAlign": "center", "letterSpacing": "0.02em",
+        }),
         html.Div([
             html.Div(style={
-                "width": "8px", "height": "8px", "borderRadius": "50%",
-                "background": "#2F81F7" if i == idx else "rgba(255,255,255,0.12)",
-                "transition": "all 0.3s", "cursor": "pointer",
+                "width": "7px", "height": "7px", "borderRadius": "50%",
+                "background": color if i == idx else "rgba(255,255,255,0.1)",
+                "transition": "all 0.3s", "cursor": "pointer", "flexShrink": "0",
             }) for i in range(len(stats))
-        ], style={"display": "flex", "gap": "8px", "flexWrap": "wrap", "maxWidth": "200px"}),
-    ])
+        ], style={
+            "display": "flex", "gap": "8px", "justifyContent": "center",
+            "flexWrap": "wrap", "maxWidth": "240px", "margin": "0 auto",
+        }),
+    ], style={"textAlign": "center", "display": "flex", "flexDirection": "column",
+              "alignItems": "center", "justifyContent": "center", "height": "100%"})
 
 
 @app.callback(
@@ -1617,7 +1639,29 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                                 "textAlign": "center", "marginTop": "4px"}),
             ], style={"padding": "28px 0 20px", "borderBottom": "1px solid rgba(255,255,255,0.06)"}),
             kpi_cards,
-            marcus_alert(df, selected_airline, selected_airport),
+            html.Div([
+                html.Div([
+                    html.Div("💡", style={"fontSize": "20px", "marginRight": "14px", "flexShrink": "0"}),
+                    html.Div([
+                        html.Div([
+                            html.Span("Decision Insight  ", style={
+                                "fontSize": "11px", "fontWeight": "700", "color": "#D29922",
+                                "textTransform": "uppercase", "letterSpacing": "0.1em", "marginRight": "8px",
+                            }),
+                            html.Span("Sunday and Friday evenings (19–22h) are the worst slots — avg delay up to 19 min with 50k+ flights. "
+                                     "Best option: fly Tuesday or Thursday before 9am — avg delay is negative (arrives early). "
+                                     "Book Delta Air Lines on an early weekday morning for maximum reliability.",
+                                     style={"fontSize": "13px", "color": "#E6EDF3", "lineHeight": "1.6"}),
+                        ]),
+                        html.Div("Monday 6–9am from ORD · Updated with BTS 2023 real data",
+                                 style={"fontSize": "11px", "color": "#7D8590", "marginTop": "6px"}),
+                    ], style={"flex": "1"}),
+                ], style={"display": "flex", "alignItems": "flex-start"}),
+            ], style={
+                "background": "rgba(210,153,34,0.07)", "border": "1px solid rgba(210,153,34,0.25)",
+                "borderLeft": "4px solid #D29922", "borderRadius": "0 10px 10px 0",
+                "padding": "16px 20px", "marginTop": "16px", "marginBottom": "0",
+            }),
             html.Div([
                 # TWO BOXES ROW
                 html.Div([
@@ -1656,56 +1700,18 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                         html.Div("Live data pulse", style={
                             "fontSize": "11px", "fontWeight": "600", "color": "#7D8590",
                             "textTransform": "uppercase", "letterSpacing": "0.08em", "marginBottom": "20px",
+                            "textAlign": "center",
                         }),
-                        html.Div(id="data-ticker-s1"),
+                        html.Div(id="data-ticker-s1", style={"flex": "1", "display": "flex",
+                                                               "alignItems": "center", "justifyContent": "center"}),
                         dcc.Interval(id="ticker-interval-s1", interval=2500, n_intervals=0),
                     ], style={
                         "flex": "1", "padding": "28px 32px", "background": "#161B22",
                         "borderRadius": "14px", "border": "1px solid rgba(255,255,255,0.06)",
                         "borderTop": "4px solid #2F81F7", "marginLeft": "16px",
+                        "display": "flex", "flexDirection": "column", "justifyContent": "center",
                     }),
                 ], style={"display": "flex", "gap": "0", "marginTop": "20px"}),
-
-                # Watermark numbers strip
-                html.Div([
-                    html.Div([
-                        html.Div(val, style={
-                            "fontSize": size, "fontWeight": "800",
-                            "color": f"rgba({rgb},0.05)", "letterSpacing": "-4px",
-                            "lineHeight": "1", "userSelect": "none", "pointerEvents": "none",
-                            "whiteSpace": "nowrap",
-                        }),
-                        html.Div(label, style={
-                            "fontSize": "10px", "color": f"rgba({rgb},0.1)",
-                            "letterSpacing": "0.1em", "textTransform": "uppercase",
-                            "marginTop": "4px", "userSelect": "none", "pointerEvents": "none",
-                        }),
-                    ], style={"textAlign": "center", "flex": "1", "padding": "0 8px"})
-                    for val, label, size, rgb in [
-                        ("6.7M",   "flights",       "64px", "47,129,247"),
-                        ("79.4%",  "on-time",       "64px", "210,153,34"),
-                        ("256.8M", "hours lost",    "56px", "218,54,51"),
-                        ("6.6",    "delay min",     "64px", "46,160,67"),
-                        ("67%",    "airline fault", "64px", "218,54,51"),
-                    ]
-                ], style={
-                    "display": "flex", "alignItems": "center", "justifyContent": "space-between",
-                    "padding": "32px 20px 8px", "borderTop": "1px solid rgba(255,255,255,0.03)",
-                    "marginTop": "24px", "overflow": "hidden",
-                }),
-
-                # Airplane trail
-                html.Div([
-                    html.Span("✈", style={
-                        "fontSize": f"{size}px", "color": f"rgba(47,129,247,{op})",
-                        "marginRight": f"{gap}px", "userSelect": "none",
-                    })
-                    for size, op, gap in [
-                        (9,0.06,14),(11,0.09,18),(14,0.12,22),(18,0.16,26),
-                        (22,0.20,30),(28,0.25,34),(22,0.20,30),(18,0.16,26),
-                        (14,0.12,22),(11,0.09,18),(9,0.06,14),
-                    ]
-                ], style={"textAlign": "center", "padding": "12px 0 4px"}),
 
                 # Footer
                 html.Div(
