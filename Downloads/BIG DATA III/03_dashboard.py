@@ -1074,6 +1074,13 @@ app.layout = html.Div(style={"background": C["bg"], "minHeight": "100vh", "fontF
         "display": "flex", "alignItems": "center", "justifyContent": "space-between",
     }, children=[
         html.Div([
+            html.Button("☰  Menu", id="menu-toggle", n_clicks=0, style={
+                "background": "transparent", "color": "#7D8590",
+                "border": "1px solid rgba(255,255,255,0.12)", "borderRadius": "8px",
+                "padding": "7px 14px", "fontSize": "12px", "fontWeight": "600",
+                "cursor": "pointer", "marginRight": "16px", "flexShrink": "0",
+                "fontFamily": "system-ui,-apple-system,sans-serif",
+            }),
             html.Span("✈ ", style={"fontSize": "20px", "color": "#2F81F7", "marginRight": "10px"}),
             html.Div([
                 html.Div("Delay Risk & Operations Dashboard",
@@ -1102,23 +1109,8 @@ app.layout = html.Div(style={"background": C["bg"], "minHeight": "100vh", "fontF
     # Slide store
     dcc.Store(id="current-slide", data=0),
 
-    # Floating chapter menu toggle
-    html.Div([
-        html.Button("⌂  Menu", id="menu-toggle", n_clicks=0, style={
-            "background": "rgba(47,129,247,0.12)",
-            "color": "#2F81F7",
-            "border": "1px solid rgba(47,129,247,0.3)",
-            "borderRadius": "8px",
-            "padding": "7px 14px",
-            "fontSize": "12px",
-            "fontWeight": "600",
-            "cursor": "pointer",
-            "letterSpacing": "0.02em",
-            "fontFamily": "system-ui,-apple-system,sans-serif",
-        }),
-    ], style={
-        "position": "fixed", "top": "76px", "left": "16px", "zIndex": "2000",
-    }),
+    # Ticker interval (always in DOM; disabled when not on slide 1)
+    dcc.Interval(id="ticker-interval", interval=2000, n_intervals=0, disabled=True),
 
     # Collapsible side panel
     html.Div([
@@ -1152,9 +1144,10 @@ app.layout = html.Div(style={"background": C["bg"], "minHeight": "100vh", "fontF
 
     # Slide content area
     html.Div(id="slide-content", style={
-        "padding": "32px 40px 120px 40px",
+        "padding": "16px 28px 100px 28px",
         "overflowY": "auto",
-        "height": "calc(100vh - 80px)",
+        "minHeight": "calc(100vh - 64px - 60px)",
+        "boxSizing": "border-box",
     }),
 
     # Progress dots (static — styles updated per slide by callback)
@@ -1219,6 +1212,7 @@ def slide_question(parts, marcus_quote, icon=""):
     for text, highlight in parts:
         title_spans.append(html.Span(text, style={
             "fontSize": "38px", "fontWeight": "800", "letterSpacing": "-1px", "lineHeight": "1.15",
+            "whiteSpace": "pre",
             "color": "#2F81F7" if highlight else "#E6EDF3",
         }))
     return html.Div([
@@ -1446,7 +1440,8 @@ def _slide8_content():
      Input("btn-home", "n_clicks"),
      Input({"type": "menu-nav", "index": ALL}, "n_clicks")] +
     [Input(f"dot-{i}", "n_clicks") for i in range(9)] +
-    [Input(f"panel-slide-{i}", "n_clicks") for i in range(1, 9)],
+    [Input(f"panel-slide-{i}", "n_clicks") for i in range(1, 9)] +
+    [Input(f"journey-slide-{i}", "n_clicks") for i in range(1, 9)],
     State("current-slide", "data"),
     prevent_initial_call=True,
 )
@@ -1469,6 +1464,8 @@ def navigate(*args):
     if "dot-" in prop:
         return int(prop.split(".")[0].split("-")[1])
     if "panel-slide-" in prop:
+        return int(prop.split(".")[0].split("-")[2])
+    if "journey-slide-" in prop:
         return int(prop.split(".")[0].split("-")[2])
     return current
 
@@ -1499,6 +1496,49 @@ def toggle_panel(*args):
 )
 def update_dots(slide):
     return [_DOT_ACTIVE if i == slide else _DOT_INACTIVE for i in range(9)]
+
+
+@app.callback(
+    Output("ticker-interval", "disabled"),
+    Input("current-slide", "data"),
+)
+def toggle_ticker(slide):
+    return slide != 1
+
+
+@app.callback(
+    Output("data-ticker", "children"),
+    Input("ticker-interval", "n_intervals"),
+    prevent_initial_call=True,
+)
+def update_ticker(n):
+    stats = [
+        ("6,743,400", "flights analysed", "#2F81F7"),
+        ("256.8M", "passenger-hours lost", "#DA3633"),
+        ("79.4%", "system on-time rate", "#D29922"),
+        ("6.6 min", "avg arrival delay", "#2EA043"),
+        ("1.3%", "cancellation rate", "#2EA043"),
+        ("67%", "delays airline-controllable", "#DA3633"),
+        ("43 pts", "FRI gap: Delta vs Frontier", "#D29922"),
+        ("−3 min", "best slot: Tue 06:00", "#2EA043"),
+        ("13.8%", "JetBlue severe delay rate", "#DA3633"),
+        ("19 min", "worst slot: Sun 20:00", "#DA3633"),
+    ]
+    idx = n % len(stats)
+    value, label, color = stats[idx]
+    return html.Div([
+        html.Div(value, style={
+            "fontSize": "56px", "fontWeight": "800", "color": color,
+            "letterSpacing": "-2px", "lineHeight": "1", "marginBottom": "6px",
+        }),
+        html.Div(label, style={"fontSize": "13px", "color": "#7D8590", "marginBottom": "20px"}),
+        html.Div([
+            html.Div(style={
+                "width": "6px", "height": "6px", "borderRadius": "50%",
+                "background": "#2F81F7" if i == idx else "rgba(255,255,255,0.15)",
+            }) for i in range(len(stats))
+        ], style={"display": "flex", "gap": "6px", "flexWrap": "wrap", "maxWidth": "160px"}),
+    ])
 
 
 @app.callback(
@@ -1575,57 +1615,45 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
             for label, value, color, sub in kpi_rows
         ], style={"display": "flex", "gap": "16px", "padding": "8px 0 16px"})
 
-        context_left = html.Div([
-            html.Div("What this means for Marcus", style={
-                "fontSize": "12px", "fontWeight": "600", "color": "#7D8590",
+        journey_timeline = html.Div([
+            html.Div("Marcus's journey — click any chapter", style={
+                "fontSize": "11px", "fontWeight": "600", "color": "#7D8590",
                 "textTransform": "uppercase", "letterSpacing": "0.08em", "marginBottom": "16px",
             }),
-            *[html.Div([
-                html.Div(stat, style={"fontSize": "32px", "fontWeight": "800", "color": col,
-                                      "letterSpacing": "-1px", "lineHeight": "1", "marginBottom": "4px"}),
-                html.Div(label, style={"fontSize": "12px", "color": "#7D8590"}),
-            ], style={"padding": "16px 0", "borderBottom": "1px solid rgba(255,255,255,0.06)"})
-            for stat, label, col in [
-                ("1 in 5", "flights arrives late by official BTS definition", "#D29922"),
-                ("67%",    "of delays are within airline control", "#DA3633"),
-                ("3×",     "higher severe delay rate on JetBlue vs Delta", "#DA3633"),
-                ("-3 min", "average delay on the best departure slot (Tue 06:00)", "#2EA043"),
-            ]],
-        ], style={"flex": "1", "padding": "24px 28px", "background": "#161B22",
-                  "borderRadius": "12px", "border": "1px solid rgba(255,255,255,0.06)"})
+            html.Div([
+                html.Div([
+                    html.Div(icon, style={"fontSize": "22px", "marginBottom": "6px"}),
+                    html.Div(f"0{i+1}", style={"fontSize": "9px", "color": "#2F81F7",
+                             "fontFamily": "monospace", "fontWeight": "700", "marginBottom": "4px"}),
+                    html.Div(title, style={"fontSize": "11px", "color": "#E6EDF3",
+                             "fontWeight": "500", "textAlign": "center", "lineHeight": "1.3"}),
+                ], id=f"journey-slide-{i+1}", n_clicks=0, style={
+                    "display": "flex", "flexDirection": "column", "alignItems": "center",
+                    "padding": "14px 8px", "background": "rgba(22,27,34,0.8)",
+                    "border": "1px solid rgba(255,255,255,0.06)", "borderRadius": "10px",
+                    "cursor": "pointer", "flex": "1", "transition": "all 0.15s", "minWidth": "0",
+                })
+                for i, (icon, title) in enumerate([
+                    ("📊", "The System"), ("🗺️", "Where"), ("🔍", "Why"), ("⏰", "When"),
+                    ("✈️", "Who"), ("⛓️", "Domino"), ("🔮", "Future"), ("✅", "Decision"),
+                ])
+            ], style={"display": "flex", "gap": "8px"}),
+        ], style={
+            "flex": "3", "padding": "24px 28px", "background": "#161B22",
+            "borderRadius": "12px", "border": "1px solid rgba(255,255,255,0.06)",
+        })
 
-        context_right = html.Div([
-            html.Div("What this means", style={
+        data_ticker = html.Div([
+            html.Div("Live data pulse", style={
                 "fontSize": "11px", "fontWeight": "600", "color": "#7D8590",
                 "textTransform": "uppercase", "letterSpacing": "0.08em", "marginBottom": "20px",
             }),
-            html.Div([
-                html.Div("1 in 5", style={"fontSize": "52px", "fontWeight": "800",
-                         "color": "#D29922", "letterSpacing": "-2px", "lineHeight": "1", "marginBottom": "6px"}),
-                html.Div("flights arrives late", style={"fontSize": "14px", "color": "#7D8590"}),
-            ], style={"padding": "20px 0", "borderBottom": "1px solid rgba(255,255,255,0.06)", "marginBottom": "20px"}),
-
-            html.Div([
-                html.Div("67%", style={"fontSize": "52px", "fontWeight": "800",
-                         "color": "#DA3633", "letterSpacing": "-2px", "lineHeight": "1", "marginBottom": "6px"}),
-                html.Div("of delays are airline-controllable", style={"fontSize": "14px", "color": "#7D8590"}),
-            ], style={"padding": "20px 0", "borderBottom": "1px solid rgba(255,255,255,0.06)", "marginBottom": "20px"}),
-
-            html.Div([
-                html.Div("3×", style={"fontSize": "52px", "fontWeight": "800",
-                         "color": "#DA3633", "letterSpacing": "-2px", "lineHeight": "1", "marginBottom": "6px"}),
-                html.Div("higher severe delay rate on JetBlue vs Delta", style={"fontSize": "14px", "color": "#7D8590"}),
-            ], style={"padding": "20px 0", "borderBottom": "1px solid rgba(255,255,255,0.06)", "marginBottom": "20px"}),
-
-            html.Div([
-                html.Div("−3 min", style={"fontSize": "52px", "fontWeight": "800",
-                         "color": "#2EA043", "letterSpacing": "-2px", "lineHeight": "1", "marginBottom": "6px"}),
-                html.Div("avg delay on best slot (Tue 06:00) — arrives early", style={"fontSize": "14px", "color": "#7D8590"}),
-            ], style={"padding": "20px 0"}),
-
-        ], style={"flex": "1", "padding": "28px 32px", "background": "#161B22",
-                  "borderRadius": "12px", "border": "1px solid rgba(255,255,255,0.06)",
-                  "marginLeft": "16px"})
+            html.Div(id="data-ticker"),
+        ], style={
+            "flex": "1", "padding": "24px 28px", "background": "#161B22",
+            "borderRadius": "12px", "border": "1px solid rgba(255,255,255,0.06)",
+            "marginLeft": "16px",
+        })
 
         content = html.Div([
             slide_question(
@@ -1645,8 +1673,9 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
             kpi_cards,
             marcus_alert(df, selected_airline, selected_airport),
             html.Div(style={"height": "16px"}),
-            html.Div([context_left, context_right],
-                     style={"display": "flex", "flex": "1", "paddingBottom": "100px"}),
+            html.Div([journey_timeline, data_ticker],
+                     style={"display": "flex", "marginTop": "0", "flex": "1",
+                            "minHeight": "180px", "paddingBottom": "100px"}),
         ])
 
     # ── Slide 2: Where it breaks ──
