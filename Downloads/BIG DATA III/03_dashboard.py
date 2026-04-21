@@ -1545,6 +1545,20 @@ def update_ticker_s1(n):
             "display": "flex", "gap": "8px", "justifyContent": "center",
             "flexWrap": "wrap", "maxWidth": "240px", "margin": "0 auto",
         }),
+        html.Div([
+            html.Div("← prev", style={"fontSize": "10px", "color": "rgba(255,255,255,0.15)", "cursor": "pointer"}),
+            html.Div(f"{idx+1} / {len(stats)}", style={"fontSize": "10px", "color": "#7D8590"}),
+            html.Div("next →", style={"fontSize": "10px", "color": "rgba(255,255,255,0.15)", "cursor": "pointer"}),
+        ], style={"display": "flex", "justifyContent": "space-between", "width": "100%",
+                  "maxWidth": "220px", "margin": "12px auto 0"}),
+        html.Div([
+            html.Span("Next: ", style={"color": "rgba(255,255,255,0.2)", "fontSize": "11px"}),
+            html.Span(stats[(idx+1) % len(stats)][0],
+                      style={"color": "rgba(255,255,255,0.3)", "fontSize": "11px", "fontWeight": "600"}),
+            html.Span(f" · {stats[(idx+1) % len(stats)][1]}",
+                      style={"color": "rgba(255,255,255,0.15)", "fontSize": "11px"}),
+        ], style={"textAlign": "center", "marginTop": "16px", "padding": "8px 0",
+                  "borderTop": "1px solid rgba(255,255,255,0.04)"}),
     ], style={"textAlign": "center", "display": "flex", "flexDirection": "column",
               "alignItems": "center", "justifyContent": "center", "height": "100%"})
 
@@ -1611,15 +1625,16 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
             html.Div([
                 html.Div(style={"height": "5px", "borderRadius": "5px 5px 0 0", "background": color}),
                 html.Div([
-                    html.Div(label, style={"fontSize": "11px", "color": "#7D8590", "fontWeight": "600",
+                    html.Div(label, style={"fontSize": "13px", "color": "#9BA3AF", "fontWeight": "600",
                                            "letterSpacing": "0.08em", "textTransform": "uppercase",
                                            "marginBottom": "12px"}),
                     html.Div(value, style={"fontSize": "52px", "fontWeight": "700", "color": color,
                                            "letterSpacing": "-2px", "lineHeight": "1", "marginBottom": "8px"}),
-                    html.Div(sub, style={"fontSize": "12px", "color": "#7D8590"}),
+                    html.Div(sub, style={"fontSize": "13px", "color": "#9BA3AF"}),
                 ], style={"padding": "24px 28px"}),
             ], style={"flex": "1", "background": "#161B22", "borderRadius": "0 0 12px 12px",
-                      "border": "1px solid rgba(255,255,255,0.06)", "borderTop": "none"})
+                      "border": "1px solid rgba(255,255,255,0.06)", "borderTop": "none",
+                      "minHeight": "140px"})
             for label, value, color, sub in kpi_rows
         ], style={"display": "flex", "gap": "16px", "padding": "8px 0 16px"})
 
@@ -1630,69 +1645,80 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                 "📊",
             ),
             html.Div([
+                html.Div(style={
+                    "position": "absolute", "top": "50%", "left": "50%",
+                    "transform": "translate(-50%,-50%)",
+                    "width": "400px", "height": "200px",
+                    "background": "radial-gradient(ellipse, rgba(218,54,51,0.12) 0%, transparent 70%)",
+                    "pointerEvents": "none", "zIndex": "0",
+                }),
                 html.Div("256.8M", style={
                     "fontSize": "120px", "fontWeight": "800", "color": "#DA3633",
                     "letterSpacing": "-6px", "lineHeight": "1", "textAlign": "center",
+                    "position": "relative", "zIndex": "1",
                 }),
                 html.Div("passenger-hours lost to delays in 2023",
-                         style={"fontSize": "18px", "color": "#7D8590",
-                                "textAlign": "center", "marginTop": "4px"}),
-            ], style={"padding": "28px 0 20px", "borderBottom": "1px solid rgba(255,255,255,0.06)"}),
+                         style={"fontSize": "18px", "color": "#7D8590", "textAlign": "center",
+                                "marginTop": "4px", "position": "relative", "zIndex": "1"}),
+            ], style={"padding": "32px 0 28px", "position": "relative",
+                      "borderBottom": "1px solid rgba(255,255,255,0.06)"}),
             kpi_cards,
-            html.Div([
-                html.Div([
-                    html.Div("💡", style={"fontSize": "20px", "marginRight": "14px", "flexShrink": "0"}),
-                    html.Div([
-                        html.Div([
-                            html.Span("Decision Insight  ", style={
-                                "fontSize": "11px", "fontWeight": "700", "color": "#D29922",
-                                "textTransform": "uppercase", "letterSpacing": "0.1em", "marginRight": "8px",
-                            }),
-                            html.Span("Sunday and Friday evenings (19–22h) are the worst slots — avg delay up to 19 min with 50k+ flights. "
-                                     "Best option: fly Tuesday or Thursday before 9am — avg delay is negative (arrives early). "
-                                     "Book Delta Air Lines on an early weekday morning for maximum reliability.",
-                                     style={"fontSize": "13px", "color": "#E6EDF3", "lineHeight": "1.6"}),
-                        ]),
-                        html.Div("Monday 6–9am from ORD · Updated with BTS 2023 real data",
-                                 style={"fontSize": "11px", "color": "#7D8590", "marginTop": "6px"}),
-                    ], style={"flex": "1"}),
-                ], style={"display": "flex", "alignItems": "flex-start"}),
-            ], style={
-                "background": "rgba(210,153,34,0.07)", "border": "1px solid rgba(210,153,34,0.25)",
-                "borderLeft": "4px solid #D29922", "borderRadius": "0 10px 10px 0",
-                "padding": "16px 20px", "marginTop": "16px", "marginBottom": "0",
-            }),
             html.Div([
                 # TWO BOXES ROW
                 html.Div([
-                    # LEFT BOX — Marcus's decision
+                    # LEFT BOX — Marcus's verdict
                     html.Div([
-                        html.Div("Marcus's verdict", style={
-                            "fontSize": "11px", "fontWeight": "600", "color": "#7D8590",
-                            "textTransform": "uppercase", "letterSpacing": "0.08em", "marginBottom": "20px",
-                        }),
-                        html.Div("✈ Delta", style={
-                            "fontSize": "48px", "fontWeight": "800", "color": "#2EA043",
-                            "letterSpacing": "-2px", "lineHeight": "1", "marginBottom": "6px",
-                        }),
-                        html.Div("Tuesday morning", style={
-                            "fontSize": "28px", "fontWeight": "700", "color": "#E6EDF3",
-                            "letterSpacing": "-1px", "marginBottom": "6px",
-                        }),
-                        html.Div("Never Friday evening", style={
-                            "fontSize": "18px", "fontWeight": "500", "color": "#7D8590",
-                            "marginBottom": "24px",
+                        html.Div("✅  Marcus's verdict", style={
+                            "fontSize": "11px", "fontWeight": "700", "color": "#2EA043",
+                            "textTransform": "uppercase", "letterSpacing": "0.1em", "marginBottom": "20px",
                         }),
                         html.Div([
-                            html.Span("FRI 84 · Most reliable major carrier · Severe delay rate 5.5%",
-                                     style={"fontSize": "12px", "color": "#7D8590", "lineHeight": "1.6"}),
-                        ], style={
-                            "background": "rgba(46,160,67,0.08)", "borderLeft": "3px solid #2EA043",
-                            "padding": "10px 14px", "borderRadius": "0 6px 6px 0",
+                            html.Span("✈  ", style={"fontSize": "32px", "color": "#2EA043"}),
+                            html.Span("Delta Air Lines", style={
+                                "fontSize": "36px", "fontWeight": "800", "color": "#2EA043",
+                                "letterSpacing": "-1px",
+                            }),
+                        ], style={"marginBottom": "10px", "display": "flex", "alignItems": "center"}),
+                        html.Div("Tuesday morning", style={
+                            "fontSize": "24px", "fontWeight": "700", "color": "#E6EDF3",
+                            "letterSpacing": "-0.5px", "marginBottom": "6px",
                         }),
+                        html.Div("Never Friday or Sunday evening", style={
+                            "fontSize": "16px", "color": "#7D8590", "marginBottom": "24px",
+                        }),
+                        html.Div([
+                            html.Div([
+                                html.Div("FRI 84", style={"fontSize": "20px", "fontWeight": "800",
+                                         "color": "#2EA043", "letterSpacing": "-0.5px"}),
+                                html.Div("reliability score", style={"fontSize": "11px", "color": "#7D8590", "marginTop": "2px"}),
+                            ], style={"flex": "1", "textAlign": "center", "padding": "12px 0",
+                                      "borderRight": "1px solid rgba(255,255,255,0.06)"}),
+                            html.Div([
+                                html.Div("5.5%", style={"fontSize": "20px", "fontWeight": "800",
+                                         "color": "#2EA043", "letterSpacing": "-0.5px"}),
+                                html.Div("severe delay rate", style={"fontSize": "11px", "color": "#7D8590", "marginTop": "2px"}),
+                            ], style={"flex": "1", "textAlign": "center", "padding": "12px 0",
+                                      "borderRight": "1px solid rgba(255,255,255,0.06)"}),
+                            html.Div([
+                                html.Div("83.6%", style={"fontSize": "20px", "fontWeight": "800",
+                                         "color": "#2EA043", "letterSpacing": "-0.5px"}),
+                                html.Div("on-time rate", style={"fontSize": "11px", "color": "#7D8590", "marginTop": "2px"}),
+                            ], style={"flex": "1", "textAlign": "center", "padding": "12px 0"}),
+                        ], style={
+                            "display": "flex", "background": "rgba(46,160,67,0.06)",
+                            "border": "1px solid rgba(46,160,67,0.15)", "borderRadius": "8px",
+                            "marginBottom": "20px",
+                        }),
+                        html.Div([
+                            html.Span("vs Frontier FRI 41 · ", style={"color": "#DA3633", "fontWeight": "600"}),
+                            html.Span("43-point gap invisible from average delay alone",
+                                     style={"color": "#7D8590"}),
+                        ], style={"fontSize": "12px", "borderTop": "1px solid rgba(255,255,255,0.06)",
+                                  "paddingTop": "14px"}),
                     ], style={
-                        "flex": "1", "padding": "28px 32px", "background": "#161B22",
-                        "borderRadius": "14px", "border": "1px solid rgba(255,255,255,0.06)",
+                        "flex": "1", "padding": "28px 32px",
+                        "background": "linear-gradient(135deg, rgba(46,160,67,0.08) 0%, rgba(22,27,34,1) 50%)",
+                        "borderRadius": "14px", "border": "1px solid rgba(46,160,67,0.2)",
                         "borderTop": "4px solid #2EA043",
                     }),
                     # RIGHT BOX — Animated data ticker
@@ -1706,7 +1732,8 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
                                                                "alignItems": "center", "justifyContent": "center"}),
                         dcc.Interval(id="ticker-interval-s1", interval=2500, n_intervals=0),
                     ], style={
-                        "flex": "1", "padding": "28px 32px", "background": "#161B22",
+                        "flex": "1", "padding": "28px 32px",
+                        "background": "linear-gradient(135deg, rgba(47,129,247,0.08) 0%, rgba(22,27,34,1) 60%)",
                         "borderRadius": "14px", "border": "1px solid rgba(255,255,255,0.06)",
                         "borderTop": "4px solid #2F81F7", "marginLeft": "16px",
                         "display": "flex", "flexDirection": "column", "justifyContent": "center",
