@@ -1583,6 +1583,57 @@ def render_slide(slide, selected_year, selected_airline, selected_airport):
             ], style={"padding": "28px 0 20px", "borderBottom": "1px solid rgba(255,255,255,0.06)"}),
             kpi_cards,
             marcus_alert(df, selected_airline, selected_airport),
+            html.Div([
+                html.Div([
+                    html.Div([
+                        html.Div(val, style={
+                            "fontSize": size, "fontWeight": "800",
+                            "color": f"rgba({rgb},0.06)", "letterSpacing": "-4px",
+                            "lineHeight": "1", "userSelect": "none", "pointerEvents": "none",
+                            "whiteSpace": "nowrap",
+                        }),
+                        html.Div(label, style={
+                            "fontSize": "11px", "color": f"rgba({rgb},0.15)",
+                            "letterSpacing": "0.1em", "textTransform": "uppercase",
+                            "marginTop": "6px", "userSelect": "none", "pointerEvents": "none",
+                        }),
+                    ], style={"textAlign": "center", "flex": "1", "padding": "0 12px"})
+                    for val, label, size, rgb in [
+                        ("6.7M",   "flights analysed", "80px", "47,129,247"),
+                        ("79.4%",  "on-time rate",     "80px", "210,153,34"),
+                        ("256.8M", "hours lost",       "72px", "218,54,51"),
+                        ("6.6",    "avg delay min",    "80px", "46,160,67"),
+                        ("1.3%",   "cancel rate",      "80px", "46,160,67"),
+                        ("67%",    "airline fault",    "80px", "218,54,51"),
+                    ]
+                ], style={
+                    "display": "flex", "alignItems": "center", "justifyContent": "space-between",
+                    "padding": "40px 20px 20px", "borderTop": "1px solid rgba(255,255,255,0.04)",
+                    "marginTop": "24px", "overflow": "hidden",
+                }),
+                html.Div([
+                    html.Div([
+                        html.Span("✈", style={
+                            "fontSize": f"{size}px", "color": f"rgba(47,129,247,{opacity})",
+                            "marginRight": f"{gap}px", "transform": "rotate(0deg)",
+                            "display": "inline-block", "userSelect": "none",
+                        })
+                        for size, opacity, gap in [
+                            (10, 0.08, 16), (12, 0.10, 20), (14, 0.13, 24), (18, 0.18, 28),
+                            (22, 0.22, 32), (28, 0.28, 36), (34, 0.32, 40), (40, 0.25, 36),
+                            (32, 0.18, 28), (24, 0.12, 20), (16, 0.08, 14), (10, 0.05, 10),
+                        ]
+                    ]),
+                ], style={"textAlign": "center", "padding": "16px 0 8px", "letterSpacing": "0"}),
+                html.Div(
+                    "6,743,400 real flights · BTS 2023 · OpenFlights airports.dat · FRI original KPI by Datafonos",
+                    style={
+                        "textAlign": "center", "fontSize": "11px",
+                        "color": "rgba(125,133,144,0.4)", "letterSpacing": "0.08em",
+                        "paddingBottom": "100px", "marginTop": "8px", "userSelect": "none",
+                    }
+                ),
+            ], style={"marginTop": "8px", "overflow": "hidden"}),
         ])
 
     # ── Slide 2: Where it breaks ──
